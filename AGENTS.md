@@ -140,13 +140,31 @@ npm start                              # the function locally (functions-framewo
 
 ## 5. Deploy
 
-Checked 2026-10-30: `npm start` runs the function locally (the Functions
-Framework, the same runtime Cloud Functions uses). Without `X-Sync-Key` it
-answers 403. With the key, a full dry run returned 200 in 22 s with 0 errors.
+**Deployed 2026-10-30 and running daily.**
+
+| | |
+| --- | --- |
+| Project | `kroc-services` (number 1029593951118), region `us-west1` |
+| Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
+| Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the four secrets below |
+| Secrets (Secret Manager) | `tr-client-id`, `tr-client-secret`, `zesty-instance-token`, `sync-trigger-key`; created from `.env` by `deploy/secrets.sh` (`--rotate` to replace, e.g. a new Zesty token) |
+| Schedule | Cloud Scheduler job `kroc-tractionrec-sync-daily` (us-west1): **00:00 America/Phoenix daily**, POST, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
+
+**Verified on deploy:**
+- **Auth:** no identity → 403; identity without the key → 403; both → 200.
+- **A dry run** over HTTP: 6.5 s, 0 errors.
+- **A forced Scheduler run:** POST 200, a live sync, 0 errors, 7 s.
+- **Live cache:** `npm run test:live-cache` after the site was published.
+  Both live pages were cached by Varnish (`HIT`), yet a published row change
+  showed on them after ~12 s, and the sync's restore showed at once.
+  Publishing a `tr_*` item clears the cached pages that print it.
+
+To redeploy after a code change, run from the repo root (same flags):
 
 ```
 gcloud functions deploy kroc-tractionrec-sync \
-  --gen2 --runtime=nodejs22 --region=<region> \
+  --gen2 --runtime=nodejs22 --region=us-west1 --project=kroc-services \
+  --service-account=kroc-sync-runtime@kroc-services.iam.gserviceaccount.com \
   --source=. --entry-point=sync --trigger-http --no-allow-unauthenticated \
   --timeout=540s --memory=512Mi --max-instances=1 --concurrency=1 \
   --set-env-vars=TR_LOGIN_URL=https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com,TR_API_VERSION=v62.0,ZESTY_INSTANCE_ZUID=8-80c0bba6b8-lhkcc7,DRY_RUN=0 \
@@ -161,10 +179,14 @@ gcloud functions deploy kroc-tractionrec-sync \
   The caller should also not fire a new run while one is still going.
 - **`--timeout=540s`** covers the slowest run seen: 297 s, the one-off that
   added the lifecycle fields to every item. A quiet run takes about 16–22 s.
-- **The caller** needs `roles/run.invoker` on the function. It sends an OIDC
-  identity token **and** `X-Sync-Key`, and alerts on the report's
-  `errorCount`, not the HTTP status (a partial failure still returns 200).
-  Optional query: `?datasets=tr_classes,…&dry=1`.
+- **The caller** (the Scheduler job) needs `roles/run.invoker` on the
+  function. It sends an OIDC identity token **and** `X-Sync-Key`. Alerting
+  should key off the report's `errorCount`, not the HTTP status: a partial
+  failure still returns 200. Optional query: `?datasets=tr_classes,…&dry=1`.
+  To run it now: `gcloud scheduler jobs run kroc-tractionrec-sync-daily --location=us-west1`.
+- **Logs:** Cloud Logging, `resource.labels.service_name="kroc-tractionrec-sync"`.
+  Each run logs `sync.start` and `sync.done` (`errorCount`, `durationMs`)
+  plus one line per dataset.
 - **`.gcloudignore`** uploads only `src/`, `zesty-models/` and the package
   files. Keep `zesty-models/`: the function reads the specs at runtime for
   its schema check, and every run fails without them.
@@ -222,20 +244,19 @@ gcloud functions deploy kroc-tractionrec-sync \
 
 ## 8. Open items
 
-- **Publish the site code to the live domain, then run `npm run test:live-cache`.**
-  107 views have unpublished drafts (the live domain still runs version 1 of
-  almost every view). Publishing through the API was blocked by the agent's
-  safety check on 2026-10-29, so it needs a person.
-- **Deploy** the function (§5) and point the calling service at it.
+- **An error alert:** a log-based alert on `sync.done` with `errorCount > 0`,
+  or on `sync.failed`, emailed to someone. Not set up yet: needs a recipient.
 - The org's daily API budget is unknown (`/limits` is disabled for the
   integration user). A run is about 11 Traction Rec calls, plus one per 200
-  re-read ids.
+  re-read ids. Once a day is well within any normal budget.
 - The old `/tractionrec/*.json` views are still on the instance, unread.
   Delete them in the Manager when convenient.
 - Mirror fields on the page models (the old copied Traction Rec values) are
   no longer written. Removing them from the models is a later step.
 - Traction Rec admin: tag Kickball and Corps Programs (inactive for lack of a
   category); add a membership purchase-link field.
+- Sandbox → production Traction Rec changes every Salesforce Id: plan a clean
+  rebuild before launch.
 
 ## 9. Docs
 
