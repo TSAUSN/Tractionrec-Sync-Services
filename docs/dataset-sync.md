@@ -20,9 +20,11 @@ Parsley.
   changed in Traction Rec since the files were last written.
 - **No page fetches anything.** Each page gets its Traction Rec data in the
   HTML it is served.
-- **Not deployed yet.** It's an HTTP Cloud Function that a separate service
-  will call. Until then it runs from a developer machine, and the datasets
-  refresh only when it's run.
+- **Deployed 2026-10-30.** It's an HTTP Cloud Function in Google Cloud
+  project `kroc-services` (us-west1), called by Cloud Scheduler **daily at
+  midnight, Phoenix time**. The site code is published to the live domain,
+  and a published data change reaches the live pages through their cache in
+  about 12 s.
 
 ## 1. The new sync
 
@@ -156,21 +158,17 @@ a browser fetch later is documented in [dataset-storage.md](dataset-storage.md)
 
 ## 5. Open items and risks
 
-- **Publish the site code to the live domain**, then run the live-cache check
-  (`npm run test:live-cache`). The live domain caches pages in Varnish, so a
-  published dataset change must clear the pages that print it. This is
-  untested until the code is live. The publish was blocked for the agent, so
-  it needs a person.
-- **Deploy the function** and point the calling service at it. Until it runs
-  regularly, classes, prices and spot counts go stale, and a closed
-  registration window stays open on the site.
+- **An error alert** on runs that report errors, emailed to someone. Not set
+  up yet: needs a recipient.
 - **Editors can edit dataset items in the Manager.** Zesty has no read-only
   field. An edit holds until that record next changes in Traction Rec.
+- **Freshness is once a day.** A class whose registration window closes
+  during the day shows as open until the next midnight run. Run the job by
+  hand to refresh sooner.
 - **Sandbox → production Traction Rec** changes every Salesforce Id. That needs
   a clean rebuild before launch.
 - The old `/tractionrec/` views are still on the instance, unread; delete them
   when convenient.
-- Nothing is committed yet.
 
 **Further reading:**
 - [dataset-storage.md](dataset-storage.md): the design, the instance
