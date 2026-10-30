@@ -1,0 +1,236 @@
+{
+  "name": "tr_membership_types",
+  "label": "TR Membership Types",
+  "type": "dataset",
+  "description": "Traction Rec data, written by kroc-tractionrec-sync. Do not edit: the next sync overwrites every field. Source: TREX1__Membership_Type__c.",
+  "fields": [
+    {
+      "name": "tractionrec_id",
+      "label": "Traction Rec Id",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.Id. The sync finds this item by it.",
+      "required": true
+    },
+    {
+      "name": "name",
+      "label": "Name",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.Name",
+      "required": true
+    },
+    {
+      "name": "category",
+      "label": "Category",
+      "datatype": "one_to_one",
+      "description": "TREX1__Membership_Type__c.TREX1__Category__c",
+      "relatedModel": "tr_membership_categories",
+      "relatedField": "name"
+    },
+    {
+      "name": "product",
+      "label": "Product",
+      "datatype": "one_to_one",
+      "description": "TREX1__Membership_Type__c.TREX1__Product__c",
+      "relatedModel": "tr_products",
+      "relatedField": "name"
+    },
+    {
+      "name": "available_online",
+      "label": "Available Online",
+      "datatype": "yes_no",
+      "description": "TREX1__Membership_Type__c.TREX1__Available_Online__c"
+    },
+    {
+      "name": "available_for_purchase",
+      "label": "Available For Purchase",
+      "datatype": "yes_no",
+      "description": "TREX1__Membership_Type__c.TREX1__Available_For_Purchase__c"
+    },
+    {
+      "name": "description",
+      "label": "Description",
+      "datatype": "textarea",
+      "description": "TREX1__Membership_Type__c.TREX1__Description__c"
+    },
+    {
+      "name": "age_range_name",
+      "label": "Age Range",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Age_Range_Name__c"
+    },
+    {
+      "name": "min_age",
+      "label": "Min Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Min_Age__c"
+    },
+    {
+      "name": "max_age",
+      "label": "Max Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Max_Age__c (110 = no upper limit)"
+    },
+    {
+      "name": "term_length",
+      "label": "Term Length",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Term_Length__c"
+    },
+    {
+      "name": "term_type",
+      "label": "Term Type",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Term_Type__c (Daily / Monthly / ...)"
+    },
+    {
+      "name": "end_date_setting",
+      "label": "End Date Setting",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__End_Date_Setting__c"
+    },
+    {
+      "name": "fixed_term_start_date",
+      "label": "Fixed Term Start",
+      "datatype": "date",
+      "description": "TREX1__Membership_Type__c.TREX1__Fixed_Term_Start_Date__c"
+    },
+    {
+      "name": "fixed_term_end_date",
+      "label": "Fixed Term End",
+      "datatype": "date",
+      "description": "TREX1__Membership_Type__c.TREX1__Fixed_Term_End_Date__c"
+    },
+    {
+      "name": "is_group",
+      "label": "Family / Group",
+      "datatype": "yes_no",
+      "description": "TREX1__Membership_Type__c.TREX1__Is_Group__c"
+    },
+    {
+      "name": "group_1_name",
+      "label": "Group 1 Name",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_1_Name__c"
+    },
+    {
+      "name": "group_1_plural_name",
+      "label": "Group 1 Plural",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_1_Plural_Name__c"
+    },
+    {
+      "name": "group_1_min_age",
+      "label": "Group 1 Min Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_1_Min_Age__c"
+    },
+    {
+      "name": "group_1_max_age",
+      "label": "Group 1 Max Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_1_Max_Age__c"
+    },
+    {
+      "name": "group_1_max_allowed",
+      "label": "Group 1 Max Allowed",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_1_Max_Allowed__c"
+    },
+    {
+      "name": "group_2_name",
+      "label": "Group 2 Name",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_2_Name__c"
+    },
+    {
+      "name": "group_2_plural_name",
+      "label": "Group 2 Plural",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_2_Plural_Name__c"
+    },
+    {
+      "name": "group_2_min_age",
+      "label": "Group 2 Min Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_2_Min_Age__c"
+    },
+    {
+      "name": "group_2_max_age",
+      "label": "Group 2 Max Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_2_Max_Age__c"
+    },
+    {
+      "name": "group_2_max_allowed",
+      "label": "Group 2 Max Allowed",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_2_Max_Allowed__c"
+    },
+    {
+      "name": "group_3_name",
+      "label": "Group 3 Name",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_3_Name__c"
+    },
+    {
+      "name": "group_3_plural_name",
+      "label": "Group 3 Plural",
+      "datatype": "text",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_3_Plural_Name__c"
+    },
+    {
+      "name": "group_3_min_age",
+      "label": "Group 3 Min Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_3_Min_Age__c"
+    },
+    {
+      "name": "group_3_max_age",
+      "label": "Group 3 Max Age",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_3_Max_Age__c"
+    },
+    {
+      "name": "group_3_max_allowed",
+      "label": "Group 3 Max Allowed",
+      "datatype": "number",
+      "description": "TREX1__Membership_Type__c.TREX1__Group_3_Max_Allowed__c"
+    },
+    {
+      "name": "active",
+      "label": "Active",
+      "datatype": "yes_no",
+      "description": "1 = published online in Traction Rec now. 0 = no longer published (removed, outside its registration window, set Not Available, or its parent is gone); the site hides it. Set by the sync."
+    },
+    {
+      "name": "inactive_reason",
+      "label": "Inactive Reason",
+      "datatype": "textarea",
+      "description": "Why active is 0: Traction Rec's own reason (e.g. Outside Course Option Registration Timeframe), Removed from Traction Rec, or a missing parent. Empty when active."
+    },
+    {
+      "name": "last_modified_date",
+      "label": "Last Modified",
+      "datatype": "datetime",
+      "description": "TREX1__Membership_Type__c.LastModifiedDate (UTC)"
+    },
+    {
+      "name": "system_modstamp",
+      "label": "System Modstamp",
+      "datatype": "datetime",
+      "description": "TREX1__Membership_Type__c.SystemModstamp (UTC)"
+    },
+    {
+      "name": "sync_hash",
+      "label": "Sync Hash",
+      "datatype": "text",
+      "description": "Hash of this record's Traction Rec values. The sync rewrites the item only when it changes."
+    },
+    {
+      "name": "synced_at",
+      "label": "Synced At",
+      "datatype": "datetime",
+      "description": "When the sync last wrote this item (UTC)."
+    }
+  ]
+}

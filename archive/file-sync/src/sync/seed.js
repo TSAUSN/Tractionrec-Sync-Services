@@ -48,7 +48,8 @@ function buildCreateData({
   }
 
   // 2. Traction Rec, where the two models agree on meaning
-  const trData = (snapshot && snapshot.data) || {};
+  // Salesforce's fields are the snapshot's root keys (see buildSnapshot).
+  const trData = snapshot || {};
   for (const [zestyField, source] of Object.entries(tier.zestyFieldsFromTr || {})) {
     const value = typeof source === "function" ? source(trData, snapshot) : trData[source];
     if (value === undefined || value === null || value === "") {

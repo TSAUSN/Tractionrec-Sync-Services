@@ -1,0 +1,82 @@
+{
+  "name": "tr_membership_categories",
+  "label": "TR Membership Categories",
+  "type": "dataset",
+  "description": "Traction Rec data, written by kroc-tractionrec-sync. Do not edit: the next sync overwrites every field. Source: TREX1__Membership_Category__c.",
+  "fields": [
+    {
+      "name": "tractionrec_id",
+      "label": "Traction Rec Id",
+      "datatype": "text",
+      "description": "TREX1__Membership_Category__c.Id. The sync finds this item by it.",
+      "required": true
+    },
+    {
+      "name": "name",
+      "label": "Name",
+      "datatype": "text",
+      "description": "TREX1__Membership_Category__c.Name",
+      "required": true
+    },
+    {
+      "name": "available_online",
+      "label": "Available Online",
+      "datatype": "yes_no",
+      "description": "TREX1__Membership_Category__c.TREX1__Available_Online__c"
+    },
+    {
+      "name": "available_for_purchase",
+      "label": "Available For Purchase",
+      "datatype": "yes_no",
+      "description": "TREX1__Membership_Category__c.TREX1__Available_For_Purchase__c"
+    },
+    {
+      "name": "category_description",
+      "label": "Description",
+      "datatype": "textarea",
+      "description": "TREX1__Membership_Category__c.TREX1__Category_Description__c"
+    },
+    {
+      "name": "display_order",
+      "label": "Display Order",
+      "datatype": "number",
+      "description": "TREX1__Membership_Category__c.TREX1__Display_Order__c"
+    },
+    {
+      "name": "active",
+      "label": "Active",
+      "datatype": "yes_no",
+      "description": "1 = published online in Traction Rec now. 0 = no longer published (removed, outside its registration window, set Not Available, or its parent is gone); the site hides it. Set by the sync."
+    },
+    {
+      "name": "inactive_reason",
+      "label": "Inactive Reason",
+      "datatype": "textarea",
+      "description": "Why active is 0: Traction Rec's own reason (e.g. Outside Course Option Registration Timeframe), Removed from Traction Rec, or a missing parent. Empty when active."
+    },
+    {
+      "name": "last_modified_date",
+      "label": "Last Modified",
+      "datatype": "datetime",
+      "description": "TREX1__Membership_Category__c.LastModifiedDate (UTC)"
+    },
+    {
+      "name": "system_modstamp",
+      "label": "System Modstamp",
+      "datatype": "datetime",
+      "description": "TREX1__Membership_Category__c.SystemModstamp (UTC)"
+    },
+    {
+      "name": "sync_hash",
+      "label": "Sync Hash",
+      "datatype": "text",
+      "description": "Hash of this record's Traction Rec values. The sync rewrites the item only when it changes."
+    },
+    {
+      "name": "synced_at",
+      "label": "Synced At",
+      "datatype": "datetime",
+      "description": "When the sync last wrote this item (UTC)."
+    }
+  ]
+}

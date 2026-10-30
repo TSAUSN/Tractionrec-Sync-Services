@@ -13,9 +13,15 @@ const {
 } = require("../zesty/items");
 const { indexViews, writeSnapshot, snapshotPath } = require("../zesty/views");
 const { reconcile, orphansAreMeaningful } = require("./reconcile");
+const { linkItem, fileKey } = require("./shape");
 const { readState, writeState, hashesFor } = require("./state");
+const { writeTierFile, writeDerivedFile, readTierFile } = require("./tier-files");
+const { relations, buildChildrenFiles } = require("./children-files");
 const { uniquePathPart, collectUsedPaths } = require("./paths");
 const log = require("../logger");
+
+/** The item index of a files-only tier: it has no model, so it has no items. */
+const NO_ITEMS = Object.freeze({ byTrId: new Map(), duplicates: new Map(), unlinked: [], all: [] });
 
 /** Stand-in for an item a dry run would have created. Never written anywhere. */
 const DRY_RUN_ZUID = "7-000000000000-dryrun";
@@ -50,6 +56,9 @@ async function run(overrides = {}) {
    */
   const usedPaths = new Set();
   for (const key of Object.keys(TIERS)) {
+    if (TIERS[key].filesOnly) {
+      continue;
+    }
     const zuid = models.get(TIERS[key].zestyModel);
     if (!zuid) {
       continue;
@@ -68,7 +77,7 @@ async function run(overrides = {}) {
    * The parent index for a tier, loaded from the instance when that tier is
    * not part of this run.
    *
-   * Without this, `--tiers=class` alone would skip every class: the parent map
+   * Without this, `--tiers=classes` alone would skip every class: the parent map
    * is built as tiers are processed, so a run that does not include `course`
    * would find no parent for anything. That is not an edge case — the
    * recommended schedule deliberately splits the tiers across two cron jobs
@@ -100,13 +109,16 @@ async function run(overrides = {}) {
     zuidByTrId.set(parentTier, map);
     return map;
   }
-  const report = { startedAt: startedAt.toISOString(), dryRun: cfg.dryRun, tiers: {} };
+  const report = { startedAt: startedAt.toISOString(), dryRun: cfg.dryRun, tiers: {}, children: {} };
+
+  /** tierKey -> every row of that tier's file, for the children files. */
+  const snapshotsByTier = {};
 
   for (const tierKey of cfg.tiers) {
     const tier = TIERS[tierKey];
-    const modelZuid = models.get(tier.zestyModel);
+    const modelZuid = tier.filesOnly ? null : models.get(tier.zestyModel);
 
-    if (!modelZuid) {
+    if (!tier.filesOnly && !modelZuid) {
       throw new Error(
         `Zesty model "${tier.zestyModel}" not found on instance ${cfg.zesty.instanceZuid}. ` +
           "Check the model's reference name in the Manager."
@@ -114,15 +126,25 @@ async function run(overrides = {}) {
     }
 
     const { records, extras } = await fetchTier(tr, tier);
-    const itemIndex = await indexItems(zesty, modelZuid);
+    // A files-only tier (memberships) has no model, so no items to index,
+    // create or link: every record goes straight to its file.
+    const itemIndex = tier.filesOnly ? NO_ITEMS : await indexItems(zesty, modelZuid);
 
     // Zesty enforces required fields on create. Know which they are before
     // building a payload, so a missing one is named rather than guessed at.
-    const requiredFields = await requiredFieldsFor(zesty, modelZuid);
-    const templateData = await loadSeedTemplate(
-      zesty,
-      modelZuid,
-      (cfg.seedTemplates || {})[tierKey]
+    const requiredFields = tier.filesOnly ? [] : await requiredFieldsFor(zesty, modelZuid);
+    const templateData = tier.filesOnly
+      ? null
+      : await loadSeedTemplate(zesty, modelZuid, (cfg.seedTemplates || {})[tierKey]);
+
+    // A ledger hash only means "already written" while its file still exists.
+    // Without this, a partial reset (`--tiers=courses`) deleted the files but
+    // left their hashes, so every record looked unchanged and the files were
+    // never recreated.
+    const previousHashes = Object.fromEntries(
+      Object.entries(hashesFor(state, tierKey)).filter(([trId]) =>
+        viewIndex.has(snapshotPath(tierKey, trId))
+      )
     );
 
     const plan = reconcile({
@@ -131,7 +153,7 @@ async function run(overrides = {}) {
       trRecords: records,
       extras,
       itemIndex,
-      previousHashes: hashesFor(state, tierKey),
+      previousHashes,
       now: startedAt
     });
 
@@ -141,6 +163,8 @@ async function run(overrides = {}) {
     }
 
     const hashes = { ...hashesFor(state, tierKey) };
+    /** Every record's snapshot, collected for the tier file (see tier-files.js). */
+    const tierSnapshots = [];
     const outcome = {
       created: 0,
       refreshed: 0,
@@ -154,10 +178,18 @@ async function run(overrides = {}) {
     };
 
     async function writeOne(trId, snapshot, itemZuid) {
-      // The snapshot records which Zesty item owns it, so a consumer holding
-      // only the file can get back to the CMS entry without a second lookup.
+      // The snapshot records which Zesty item owns it and the URL that item
+      // answers on, so a page holding only the file can link to the CMS page.
+      // Existing items were linked in reconcile; a just-created item is linked
+      // here from what createItem returned.
       const known = tierMap.get(trId);
-      snapshot.meta.zestyItemZuid = itemZuid || (known && known.zuid) || null;
+      if (!tier.filesOnly && !snapshot.meta.zestyItemZuid) {
+        linkItem(snapshot, {
+          zuid: itemZuid || (known && known.zuid),
+          path: known && known.pathPart ? `/${known.pathPart}/` : null
+        });
+      }
+      tierSnapshots.push(snapshot);
 
       try {
         const res = await writeSnapshot(zesty, viewIndex, {
@@ -165,8 +197,11 @@ async function run(overrides = {}) {
           payload: snapshot,
           dryRun: cfg.dryRun
         });
-        hashes[trId] = snapshot.meta.hash;
-        if (res.action === "updated" || res.action === "would-update") {
+        hashes[trId] = fileKey(snapshot);
+        // A refresh whose view is missing (after a reset, say) comes back as
+        // "created", not "updated". Counting only updates reported 0 written
+        // when 212 files had just been rewritten.
+        if (res.action !== "unchanged") {
           outcome.refreshed++;
         }
         log.debug("sync.snapshot", res);
@@ -235,6 +270,26 @@ async function run(overrides = {}) {
       await writeOne(entry.trId, entry.snapshot, entry.zuid);
     }
 
+    // The tier file is a complete picture, so it needs the records that did not
+    // change as well — they never pass through writeOne.
+    for (const entry of plan.unchanged) {
+      const rebuilt = plan.snapshotsByTrId && plan.snapshotsByTrId[entry.trId];
+      if (rebuilt) {
+        // already linked to its item and URL in reconcile
+        tierSnapshots.push(rebuilt);
+      }
+    }
+
+    if (tierSnapshots.length) {
+      tierSnapshots.sort((a, b) => String(a.meta.tractionrecId).localeCompare(b.meta.tractionrecId));
+      await writeTierFile(zesty, viewIndex, state, {
+        tierKey,
+        snapshots: tierSnapshots,
+        dryRun: cfg.dryRun
+      });
+    }
+    snapshotsByTier[tierKey] = tierSnapshots;
+
     zuidByTrId.set(tierKey, tierMap);
     state.tiers[tierKey] = {
       hashes,
@@ -260,6 +315,70 @@ async function run(overrides = {}) {
     });
   }
 
+  // --- parent -> children files (children-files.js) -----------------------
+  // After every tier, because each relationship needs both of its tiers. A
+  // tier not in this run is read back from its published tier file.
+  for (const rel of relations()) {
+    if (!cfg.tiers.includes(rel.childTierKey) && !cfg.tiers.includes(rel.parentTierKey)) {
+      continue;
+    }
+    const key = `${rel.parentTierKey}->${rel.childTierKey}`;
+    const childRows =
+      snapshotsByTier[rel.childTierKey] || (await readTierFile(zesty, viewIndex, rel.childTierKey));
+    const parentRows =
+      snapshotsByTier[rel.parentTierKey] || (await readTierFile(zesty, viewIndex, rel.parentTierKey));
+
+    if (!childRows || !parentRows) {
+      log.warn("sync.children.skipped", {
+        relation: key,
+        reason: `no rows for ${!childRows ? rel.childTierKey : rel.parentTierKey}; sync that tier first`
+      });
+      report.children[key] = { skipped: true };
+      continue;
+    }
+
+    const { files, unparented } = buildChildrenFiles({
+      ...rel,
+      parentIds: parentRows.map((r) => (r.meta && r.meta.tractionrecId) || r.Id),
+      childRows
+    });
+
+    const outcome = { files: files.length, written: 0, unchanged: 0, empty: 0, unparented, errors: [] };
+    for (const file of files) {
+      if (!file.rows.length) {
+        outcome.empty++;
+      }
+      try {
+        const res = await writeDerivedFile(zesty, viewIndex, state, {
+          filename: file.filename,
+          rows: file.rows,
+          dryRun: cfg.dryRun
+        });
+        if (res.action === "unchanged") {
+          outcome.unchanged++;
+        } else {
+          outcome.written++;
+        }
+      } catch (err) {
+        outcome.errors.push({ file: file.filename, error: err.message });
+        log.error("sync.children.failed", { file: file.filename, error: err.message });
+      }
+    }
+    report.children[key] = outcome;
+
+    log.info("sync.children.done", {
+      relation: key,
+      files: outcome.files,
+      written: outcome.written,
+      unchanged: outcome.unchanged,
+      empty: outcome.empty,
+      // Children whose parent is not synced (e.g. a course under a program
+      // that was skipped). They are in the tier file, but in no parent's file.
+      unparented: unparented.length,
+      errors: outcome.errors.length
+    });
+  }
+
   state.lastRun = {
     finishedAt: new Date().toISOString(),
     dryRun: cfg.dryRun,
@@ -275,6 +394,14 @@ async function run(overrides = {}) {
           errors: v.errors.length
         }
       ])
+    ),
+    children: Object.fromEntries(
+      Object.entries(report.children).map(([k, v]) => [
+        k,
+        v.skipped
+          ? { skipped: true }
+          : { files: v.files, written: v.written, unchanged: v.unchanged, empty: v.empty }
+      ])
     )
   };
 
@@ -282,7 +409,9 @@ async function run(overrides = {}) {
 
   report.finishedAt = new Date().toISOString();
   report.durationMs = Date.now() - startedAt.getTime();
-  report.errorCount = Object.values(report.tiers).reduce((n, t) => n + t.errors.length, 0);
+  report.errorCount =
+    Object.values(report.tiers).reduce((n, t) => n + t.errors.length, 0) +
+    Object.values(report.children).reduce((n, c) => n + ((c.errors && c.errors.length) || 0), 0);
 
   log.info("sync.done", {
     durationMs: report.durationMs,

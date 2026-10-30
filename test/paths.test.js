@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { uniquePathPart, collectUsedPaths } = require("../src/sync/paths");
+const { uniquePathPart, collectUsedPaths } = require("../src/datasets/paths");
 
 test("a free path part is used as-is", () => {
   const used = new Set();

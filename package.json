@@ -2,7 +2,7 @@
   "name": "kroc-tractionrec-sync",
   "version": "0.1.0",
   "private": true,
-  "description": "Scheduled one-way sync: Traction Rec (Salesforce) catalog -> Zesty WebEngine. Writes a JSON snapshot view per Traction Rec record and keeps a matching Zesty content item carrying that record's Traction Rec Id.",
+  "description": "Traction Rec (Salesforce) -> Zesty sync: copies the published catalog and memberships into the tr_* Zesty datasets and creates their catalog page items. An HTTP Cloud Function; a separate service calls it.",
   "main": "src/index.js",
   "type": "commonjs",
   "engines": {
@@ -12,7 +12,10 @@
     "start": "functions-framework --target=sync --port=8080",
     "sync": "node src/cli.js",
     "sync:dry": "DRY_RUN=1 node src/cli.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "runner": "node src/parsley-runner.js",
+    "test:scenarios": "node test/scenarios/run.js",
+    "test:live-cache": "node test/scenarios/live-cache.js"
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.4.0",

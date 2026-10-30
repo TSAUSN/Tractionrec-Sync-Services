@@ -1,6 +1,6 @@
 "use strict";
 
-const { buildSnapshot, titleFor, slugify } = require("./shape");
+const { buildSnapshot, titleFor, slugify, linkItem, fileKey } = require("./shape");
 const { TR_ID_FIELD } = require("../config");
 
 /**
@@ -16,6 +16,9 @@ const { TR_ID_FIELD } = require("../config");
  *   present              | two or more           | SKIP, report as a conflict
  *   absent               | present, has TR id    | ORPHAN — report, never delete
  *   absent               | present, no TR id     | UNLINKED — hands off entirely
+ *
+ * A `filesOnly` tier (memberships) has no Zesty model, so only the snapshot
+ * half applies: REFRESH when the file is stale, NOTHING when it is current.
  *
  * Two rules are deliberate and load-bearing:
  *
@@ -36,7 +39,9 @@ function reconcile({ tierKey, tier, trRecords, extras = {}, itemIndex, previousH
     unchanged: [],
     conflicts: [],
     orphans: [],
-    unlinked: []
+    unlinked: [],
+    /** Every snapshot built this pass, so the tier file can include unchanged rows. */
+    snapshotsByTrId: {}
   };
 
   const seenTrIds = new Set();
@@ -54,6 +59,19 @@ function reconcile({ tierKey, tier, trRecords, extras = {}, itemIndex, previousH
     }
 
     const snapshot = buildSnapshot({ tierKey, tier, record, extras, now });
+    result.snapshotsByTrId[trId] = snapshot;
+
+    // A files-only tier has no Zesty model: the file is the whole output, so
+    // there is never an item to create or link.
+    if (tier.filesOnly) {
+      if (previousHashes[trId] === fileKey(snapshot)) {
+        result.unchanged.push({ trId, zuid: null });
+      } else {
+        result.refresh.push({ trId, zuid: null, snapshot });
+      }
+      continue;
+    }
+
     const title = titleFor(tier, record);
     const item = itemIndex.byTrId.get(trId);
 
@@ -62,15 +80,17 @@ function reconcile({ tierKey, tier, trRecords, extras = {}, itemIndex, previousH
         trId,
         title,
         pathPart: slugify(title),
-        parentTrIds: snapshot.meta.parents,
+        parentTrIds: tier.relationKey ? snapshot[tier.relationKey] || [] : [],
         snapshot
       });
       continue;
     }
 
-    // The hash covers the record's values, not the time it was read, so an
-    // unchanged record produces no write at all.
-    if (previousHashes[trId] === snapshot.meta.hash) {
+    linkItem(snapshot, { zuid: item.meta.ZUID, path: item.web && item.web.path });
+
+    // The key covers the record's values and the item/URL it links to, not the
+    // time it was read, so an unchanged record produces no write at all.
+    if (previousHashes[trId] === fileKey(snapshot)) {
       result.unchanged.push({ trId, zuid: item.meta.ZUID });
       continue;
     }

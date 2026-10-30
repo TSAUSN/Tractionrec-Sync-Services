@@ -12,6 +12,16 @@ Traction Rec is the system of record for the catalog. Zesty owns the URLs, the
 page layouts and everything an editor writes. The service is the one-way bridge
 between them, and it keeps the two concerns in two separate places:
 
+Written per run: one snapshot per record at `/tractionrec/<tier>/<trId>.json`,
+**plus one file per tier** at `/tractionrec/<tier>.json` holding every record —
+that is what lets a consumer answer "which courses are in this program" in a
+single request, since each record already carries its own parent — **plus one
+children file per parent** at `/tractionrec/<parentTier>/<parentId>/<childTier>.json`
+holding only that parent's children, so a page can skip the tier file
+entirely. Tier and children files are derived from the same rows in the same
+run, and are rewritten only when their content changes. See
+[relationships-without-zesty-fields.md §2.0c](relationships-without-zesty-fields.md).
+
 | Concern | Lives in | Written by |
 | :--- | :--- | :--- |
 | Traction Rec data (schedule, capacity, price, register link) | a JSON view at `tractionrec/<tier>/<trId>.json` | **this service only** |
@@ -32,7 +42,7 @@ flowchart LR
 
   subgraph Z["Zesty instance"]
     ITEM["content item<br/>tractionrec_id = a0X…<br/>+ editorial fields"]
-    SNAP["view<br/>tractionrec/class/a0X….json"]
+    SNAP["view<br/>tractionrec/classes/a0X….json"]
   end
 
   TR --> SVC
@@ -212,6 +222,24 @@ sits, falling back to a numeric suffix. Nesting items under their parent would
 remove the collision structurally by giving each parent its own namespace;
 that is a URL-architecture decision, not a sync one.
 
+**Parsley can render Traction Rec data server-side, three ways with different
+limits — including one that makes real HTTP calls.** `api.json.get(url)`
+fetches any URL, external domains included, and iterates it: so the claim that
+Parsley has no outbound HTTP is **wrong** (corrected 2026-09-30). It still
+cannot reach Traction Rec — no headers, GET-only, and a view is public — so the
+proxy remains mandatory, but the reason changed. Fetched JSON must be a root
+array of **flat** rows: reading a nested-object value crashes the page, a dead
+URL renders empty with no error, and `where` is silently ignored.
+
+**The other two, with narrower limits:** `{{ include }}` inlines a snapshot file — path interpolation works
+for `{this.*}` and `{get_var.*}` but not loop aliases or `$` variables, and a
+missing file renders empty rather than erroring. `json()` walks JSON held in a
+content **field**: a top-level array iterates, nested arrays do not, dotted
+scalars work, and a `where` clause on such a loop is **silently ignored**. The
+two do not compose — `json()` cannot parse what `include` inlines. Tested
+2026-09-30; this is the basis of
+[relationships-without-zesty-fields.md](relationships-without-zesty-fields.md).
+
 **A view's filename needs a leading slash.** Every `ajax-json` view that
 serves on the live domain has one. A view created as `tractionrec/x.json` is
 accepted by the API, reports `status: live`, appears correctly in the Manager —
@@ -246,7 +274,7 @@ Three ways to live with it, in ascending cost:
    Costs nothing and removes the problem entirely.
 2. **Run the class tier on a short cycle** (5–15 min) and the upper three
    daily. They change on completely different timescales — categories and
-   programs move a few times a year. `?tiers=class` exists for this.
+   programs move a few times a year. `?tiers=classes` exists for this.
 3. **Add a live read-through endpoint** on this same service for the class
    detail page, and let the snapshot serve only the listing pages. This is the
    original "fetch live and merge at runtime" design, narrowed to the one page

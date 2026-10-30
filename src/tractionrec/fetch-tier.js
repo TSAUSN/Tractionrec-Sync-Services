@@ -13,10 +13,8 @@ function pluck(record, path) {
  * `shape.js`, so a raw record stays inspectable in a dry run.
  */
 async function fetchTier(client, tier) {
-  // A trFields entry is either a SOQL path or a [path, outputKey] pair.
-  const paths = tier.trFields.map((f) => (Array.isArray(f) ? f[0] : f));
   const soql =
-    `SELECT ${paths.join(", ")} FROM ${tier.trObject}` +
+    `SELECT ${tier.trFields.join(", ")} FROM ${tier.trObject}` +
     (tier.where ? ` WHERE ${tier.where}` : "");
 
   const records = await client.query(soql);
@@ -45,42 +43,59 @@ async function fetchTier(client, tier) {
     log.info("tractionrec.junction.fetched", { junction, rows: rows.length });
   }
 
-  // Price lives two hops from the class junction: Course Option -> Product ->
-  // Price Level. Course Option's Product is authoritative — Course Session's
-  // is a per-facility "<Facility> Free Product" placeholder carrying no price.
+  // Price lives two hops away: the record's Product -> Price Level. On a class
+  // it is Course Option's Product that is authoritative — Course Session's is a
+  // per-facility "<Facility> Free Product" placeholder carrying no price.
   if (tier.priceJoin) {
+    const join = tier.priceJoin;
     const productIds = [
-      ...new Set(
-        records.map((r) => pluck(r, "TREX1__Course_Option__r.TREX1__Product__c")).filter(Boolean)
-      )
+      ...new Set(records.map((r) => pluck(r, join.productPath)).filter(Boolean))
     ];
 
-    extras.priceLevelsByProduct = new Map();
+    extras.priceLevelsByProduct = groupBy(
+      await queryIn(client, join.object, join.fields, join.productField, productIds),
+      join.productField
+    );
 
-    // SOQL has a statement-length ceiling; chunk the IN list.
-    const CHUNK = 200;
-    for (let i = 0; i < productIds.length; i += CHUNK) {
-      const chunk = productIds.slice(i, i + CHUNK);
-      const inList = chunk.map((id) => `'${id}'`).join(",");
-      const levels = await client.query(
-        `SELECT ${tier.priceJoin.fields.join(", ")} FROM ${tier.priceJoin.object} ` +
-          `WHERE ${tier.priceJoin.productField} IN (${inList})`
+    // Memberships go one hop further, to the instalment plan: an Autopay
+    // membership's monthly amount exists only on its Planned Billing Schedule.
+    if (join.schedules) {
+      const levelIds = [...extras.priceLevelsByProduct.values()].flat().map((l) => l.Id);
+      extras.schedulesByLevel = groupBy(
+        await queryIn(client, join.schedules.object, join.schedules.fields, join.schedules.levelField, levelIds),
+        join.schedules.levelField
       );
-      for (const lvl of levels) {
-        const pid = lvl[tier.priceJoin.productField];
-        const list = extras.priceLevelsByProduct.get(pid) || [];
-        list.push(lvl);
-        extras.priceLevelsByProduct.set(pid, list);
-      }
     }
 
     log.info("tractionrec.prices.fetched", {
       products: productIds.length,
-      priced: extras.priceLevelsByProduct.size
+      priced: extras.priceLevelsByProduct.size,
+      schedules: extras.schedulesByLevel ? extras.schedulesByLevel.size : undefined
     });
   }
 
   return { records, extras };
+}
+
+/** `SELECT fields FROM object WHERE field IN (ids)`, chunked: SOQL has a statement-length ceiling. */
+async function queryIn(client, object, fields, field, ids) {
+  const CHUNK = 200;
+  const rows = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const inList = ids.slice(i, i + CHUNK).map((id) => `'${id}'`).join(",");
+    rows.push(...(await client.query(`SELECT ${fields.join(", ")} FROM ${object} WHERE ${field} IN (${inList})`)));
+  }
+  return rows;
+}
+
+function groupBy(rows, field) {
+  const map = new Map();
+  for (const row of rows) {
+    const list = map.get(row[field]) || [];
+    list.push(row);
+    map.set(row[field], list);
+  }
+  return map;
 }
 
 module.exports = { fetchTier, pluck };

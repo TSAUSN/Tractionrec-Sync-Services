@@ -28,10 +28,10 @@ const TEMPLATE = {
 
 test("the template fills required fields the service cannot supply", () => {
   const { data, provenance } = buildCreateData({
-    tier: TIERS.program_category,
+    tier: TIERS.program_categories,
     trId: "a2za6000000GGX4AAO",
     title: "Aquatics",
-    snapshot: { data: { name: "Aquatics" } },
+    snapshot: { name: "Aquatics" },
     requiredFields: CATEGORY_REQUIRED,
     templateData: TEMPLATE
   });
@@ -49,10 +49,10 @@ test("the template fills required fields the service cannot supply", () => {
 
 test("the template never overwrites the real title", () => {
   const { data, provenance } = buildCreateData({
-    tier: TIERS.program_category,
+    tier: TIERS.program_categories,
     trId: "a0A1",
     title: "Aquatics",
-    snapshot: { data: {} },
+    snapshot: {},
     requiredFields: CATEGORY_REQUIRED,
     templateData: TEMPLATE
   });
@@ -64,10 +64,10 @@ test("the template never overwrites the real title", () => {
 
 test("the template is confined to required fields — optional ones stay empty", () => {
   const { data } = buildCreateData({
-    tier: TIERS.program_category,
+    tier: TIERS.program_categories,
     trId: "a0A1",
     title: "Aquatics",
-    snapshot: { data: {} },
+    snapshot: {},
     requiredFields: CATEGORY_REQUIRED,
     templateData: TEMPLATE
   });
@@ -81,7 +81,7 @@ test("the template is confined to required fields — optional ones stay empty",
 
 test("Traction Rec data outranks the template when both could fill a field", () => {
   const tier = {
-    ...TIERS.program_category,
+    ...TIERS.program_categories,
     zestyFieldsFromTr: { hero_subtitle: "tagline" }
   };
 
@@ -89,7 +89,7 @@ test("Traction Rec data outranks the template when both could fill a field", () 
     tier,
     trId: "a0A1",
     title: "Aquatics",
-    snapshot: { data: { tagline: "Swim year round" } },
+    snapshot: { tagline: "Swim year round" },
     requiredFields: CATEGORY_REQUIRED,
     templateData: TEMPLATE
   });
@@ -101,7 +101,7 @@ test("Traction Rec data outranks the template when both could fill a field", () 
 
 test("an empty Traction Rec value falls through to the template", () => {
   const tier = {
-    ...TIERS.program_category,
+    ...TIERS.program_categories,
     zestyFieldsFromTr: { hero_subtitle: "tagline" }
   };
 
@@ -110,7 +110,7 @@ test("an empty Traction Rec value falls through to the template", () => {
     trId: "a0A1",
     title: "Aquatics",
     // Program Category descriptions are empty on all 9 live records.
-    snapshot: { data: { tagline: "" } },
+    snapshot: { tagline: "" },
     requiredFields: CATEGORY_REQUIRED,
     templateData: TEMPLATE
   });
@@ -121,10 +121,10 @@ test("an empty Traction Rec value falls through to the template", () => {
 
 test("with no template, unsatisfied required fields are reported by name", () => {
   const { data } = buildCreateData({
-    tier: TIERS.program_category,
+    tier: TIERS.program_categories,
     trId: "a0A1",
     title: "Aquatics",
-    snapshot: { data: {} },
+    snapshot: {},
     requiredFields: CATEGORY_REQUIRED,
     templateData: null
   });
@@ -138,22 +138,22 @@ test("with no template, unsatisfied required fields are reported by name", () =>
 
 test("class fields map from Traction Rec rather than from a placeholder", () => {
   const { data, provenance } = buildCreateData({
-    tier: TIERS.class,
+    tier: TIERS.classes,
     trId: "a0X1",
     title: "Swim Level 2",
     parentItemZuid: "7-course",
     snapshot: {
-      data: {
-        startDate: "2026-09-08",
-        endDate: "2026-10-27",
-        daysOfWeek: "Tuesday;Thursday",
-        startTime: "18:00:00.000",
-        endTime: "19:30:00.000",
-        ageMin: 5,
-        ageMax: 12,
-        instructor: "Malik Jones",
-        registerUrl: "https://example.my.site.com/s/registration?a=1",
-        spotsRemaining: 4
+      Deep_Link_URL__c: "https://example.my.site.com/s/registration?a=1",
+      TREX1__Course_Option__r: {
+        TREX1__Start_Date__c: "2026-09-08",
+        TREX1__End_Date__c: "2026-10-27",
+        TREX1__Day_of_Week__c: "Tuesday;Thursday",
+        TREX1__Start_Time_Formula__c: "18:00:00.000",
+        TREX1__End_Time_Formula__c: "19:30:00.000",
+        TREX1__Age_Min__c: 5,
+        TREX1__Age_Max__c: 12,
+        TREX1__Instructor__c: "Malik Jones",
+        TREX1__Total_Capacity_Available__c: 4
       }
     },
     requiredFields: ["class_name", "class_type", "hero_image_desktop"],
@@ -175,10 +175,10 @@ test("a multi-day class leaves the single-day dropdown empty", () => {
   // 65% of Course Options are multi-day and the Zesty dropdown only has
   // monday…sunday, so there is no value that means "Tuesday;Thursday".
   const { data } = buildCreateData({
-    tier: TIERS.class,
+    tier: TIERS.classes,
     trId: "a0X1",
     title: "Swim Level 2",
-    snapshot: { data: { daysOfWeek: "Tuesday;Thursday" } },
+    snapshot: { TREX1__Course_Option__r: { TREX1__Day_of_Week__c: "Tuesday;Thursday" } },
     requiredFields: [],
     templateData: null
   });
@@ -187,10 +187,10 @@ test("a multi-day class leaves the single-day dropdown empty", () => {
 
 test("a single-day class lowercases to match the dropdown's keys", () => {
   const { data } = buildCreateData({
-    tier: TIERS.class,
+    tier: TIERS.classes,
     trId: "a0X1",
     title: "Swim Level 2",
-    snapshot: { data: { daysOfWeek: "Thursday" } },
+    snapshot: { TREX1__Course_Option__r: { TREX1__Day_of_Week__c: "Thursday" } },
     requiredFields: [],
     templateData: null
   });
@@ -199,11 +199,11 @@ test("a single-day class lowercases to match the dropdown's keys", () => {
 
 test("member and non-member prices split out of the price-level array", () => {
   const { data } = buildCreateData({
-    tier: TIERS.class,
+    tier: TIERS.classes,
     trId: "a0X1",
     title: "Foundational Piano",
     snapshot: {
-      data: { spotsRemaining: 3 },
+      TREX1__Course_Option__r: { TREX1__Total_Capacity_Available__c: 3 },
       prices: [
         { priceType: "Non-Member", amount: 80.5 },
         { priceType: "Member", amount: 68.42 }
@@ -219,26 +219,35 @@ test("member and non-member prices split out of the price-level array", () => {
 });
 
 test("enrollment status distinguishes full from waitlist", () => {
-  const status = (tr) =>
+  const status = (opt) =>
     buildCreateData({
-      tier: TIERS.class,
+      tier: TIERS.classes,
       trId: "a0X1",
       title: "x",
-      snapshot: { data: tr },
+      snapshot: { TREX1__Course_Option__r: opt },
       requiredFields: [],
       templateData: null
     }).data.enrollment_status;
 
-  assert.equal(status({ spotsRemaining: 4 }), "open");
-  assert.equal(status({ spotsRemaining: 0, waitlistCapacity: 10, waitlistTotal: 2 }), "waitlist");
-  assert.equal(status({ spotsRemaining: 0, waitlistCapacity: 10, waitlistTotal: 10 }), "full");
-  assert.equal(status({ spotsRemaining: 0 }), "full");
+  const cap = (n, extra = {}) => ({ TREX1__Total_Capacity_Available__c: n, ...extra });
+  assert.equal(status(cap(4)), "open");
+  assert.equal(
+    status(cap(0, { TREX1__Waitlist_Capacity__c: 10, TREX1__Waitlist_Total__c: 2 })),
+    "waitlist"
+  );
+  assert.equal(
+    status(cap(0, { TREX1__Waitlist_Capacity__c: 10, TREX1__Waitlist_Total__c: 10 })),
+    "full"
+  );
+  assert.equal(status(cap(0)), "full");
+  // An uncapped option is open even at zero remaining.
+  assert.equal(status(cap(0, { TREX1__Unlimited_Capacity__c: true })), "open");
   // No capacity figure at all is unknown, not "full".
   assert.equal(status({}), undefined);
 });
 
 test("items are not nested under their parent by default", () => {
-  assert.ok(!TIERS.class.nestItemsUnderParent);
-  assert.ok(!TIERS.course.nestItemsUnderParent);
-  assert.ok(!TIERS.program.nestItemsUnderParent);
+  assert.ok(!TIERS.classes.nestItemsUnderParent);
+  assert.ok(!TIERS.courses.nestItemsUnderParent);
+  assert.ok(!TIERS.programs.nestItemsUnderParent);
 });

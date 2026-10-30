@@ -15,7 +15,14 @@ const log = require("../logger");
  * Parsley only ever sees the six-character escape sequence.
  */
 function parsleySafeJson(value) {
-  return JSON.stringify(value, null, 2).replace(/\{\{/g, "\\u007b\\u007b");
+  return (
+    JSON.stringify(value, null, 2)
+      .replace(/\{\{/g, "\\u007b\\u007b")
+      // Pages inline these files in a <script type="application/json"> with
+      // {{ include }}. A literal "</script" inside a string would end that
+      // element early; "<\/" is the same JSON string and can't close anything.
+      .replace(/<\//g, "<\\/")
+  );
 }
 
 /**
@@ -107,7 +114,15 @@ async function writeSnapshot(zesty, viewIndex, { filename, payload, dryRun }) {
       }),
       `updateView ${filename}`
     );
-    const version = (res.data && res.data.version) || existing.version;
+    // updateView does not reliably return the version it created, and falling
+    // back to `existing.version` re-publishes the OLD code — which is exactly
+    // what happened until 2026-09-30: every refresh wrote a new dev version
+    // and left the live file stale. Read the version back instead.
+    let version = res.data && res.data.version;
+    if (!version || version <= existing.version) {
+      const current = ok(await zesty.instance.getView(existing.zuid), `getView ${filename}`);
+      version = current.data.version;
+    }
     ok(await zesty.instance.publishView(existing.zuid, version), `publishView ${filename}`);
     return { action: "updated", filename, zuid: existing.zuid, version };
   }

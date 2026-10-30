@@ -1,0 +1,17 @@
+# What `gcloud functions deploy --source=.` uploads. The function needs src/,
+# zesty-models/ (read at runtime: the schema check), package.json and
+# package-lock.json. Everything else stays local.
+.gcloudignore
+.git
+.gitignore
+node_modules/
+.env
+.env.*
+*.log
+archive/
+docs/
+test/
+README.md
+AGENTS.md
+
+deploy/

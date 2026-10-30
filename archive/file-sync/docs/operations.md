@@ -51,8 +51,9 @@ gcloud functions deploy kroc-tractionrec-sync \
   --set-secrets=TR_CLIENT_ID=tr-client-id:latest,TR_CLIENT_SECRET=tr-client-secret:latest,ZESTY_INSTANCE_TOKEN=zesty-instance-token:latest,SYNC_TRIGGER_KEY=sync-trigger-key:latest
 ```
 
-`--timeout=540s` is the gen-2 HTTP ceiling and a first full run needs most of
-it: ~1,000 snapshot writes, each one a create plus a publish. Once the hash
+`--timeout=540s` is the gen-2 HTTP ceiling. A first full run into an empty
+folder writes 364 files (212 records, 4 tier files, 147 children files and the
+ledger), each a create plus a publish: **measured 230 s on 2026-10-02**. Once the hash
 ledger exists, a steady-state run touches only what changed and finishes in
 seconds. If the first run does time out, it is safe to re-run — every write is
 keyed on the Traction Rec Id, so a partial run resumes rather than duplicates.
@@ -71,7 +72,7 @@ different crons rather than one compromise interval.
 # Catalog structure: categories, programs, courses. Changes a few times a year.
 gcloud scheduler jobs create http kroc-tr-sync-structure \
   --schedule="0 4 * * *" --time-zone="America/Phoenix" \
-  --uri="https://REGION-PROJECT.cloudfunctions.net/kroc-tractionrec-sync?tiers=program_category,program,course" \
+  --uri="https://REGION-PROJECT.cloudfunctions.net/kroc-tractionrec-sync?tiers=program_categories,programs,courses" \
   --http-method=POST \
   --oidc-service-account-email=kroc-tr-sync@PROJECT.iam.gserviceaccount.com \
   --headers="X-Sync-Key=…"
@@ -79,7 +80,7 @@ gcloud scheduler jobs create http kroc-tr-sync-structure \
 # Classes: schedules, capacity, prices.
 gcloud scheduler jobs create http kroc-tr-sync-classes \
   --schedule="*/30 * * * *" --time-zone="America/Phoenix" \
-  --uri="https://REGION-PROJECT.cloudfunctions.net/kroc-tractionrec-sync?tiers=class" \
+  --uri="https://REGION-PROJECT.cloudfunctions.net/kroc-tractionrec-sync?tiers=classes" \
   --http-method=POST \
   --oidc-service-account-email=kroc-tr-sync@PROJECT.iam.gserviceaccount.com \
   --headers="X-Sync-Key=…"
@@ -105,11 +106,11 @@ cp .env.example .env     # fill in from KROC-draft/"tractionrec creds.md"
 npm install
 
 npm run sync:dry                 # plan everything, write nothing
-node src/cli.js --tiers=program_category --dry
-node src/cli.js --tiers=program_category --live   # 9 records: the safest first write
+node src/cli.js --tiers=program_categories --dry
+node src/cli.js --tiers=program_categories --live   # 9 records: the safest first write
 
 # Verified working end to end on 2026-09-25: 9 items created and published,
-# 9 snapshots serving at https://kroc.zesty.dev/tractionrec/program_category/<id>.json,
+# 9 snapshots serving at https://kroc.zesty.dev/tractionrec/program_categories/<id>.json,
 # and a second run reporting 9 unchanged with zero writes.
 npm test                         # the reconcile decision table
 ```
@@ -119,6 +120,78 @@ npm test                         # the reconcile decision table
 `git add .` away from being committed.
 
 ---
+
+## Resetting
+
+`src/reset.js` removes everything this service has written, so a sync can be
+re-run from clean. It is the tool for correcting a bad snapshot format.
+
+```bash
+npm run reset                          # plan only — deletes nothing
+npm run reset:live                     # delete every view under /tractionrec/
+node src/reset.js --live --tiers=classes # one tier's snapshots
+node src/reset.js --live --items       # ...AND the content items (see below)
+```
+
+**Views are safe to delete.** Nothing but this service writes under
+`/tractionrec/`, and a sync rebuilds them. The SDK has no `deleteView`, but the
+API supports `DELETE /web/views/{zuid}` — verified 2026-09-30.
+
+⚠️ **Items are not.** An item carrying a `tractionrec_id` may since have gained
+a hero image, body copy or SEO text from an editor, and it owns a URL that may
+be linked or indexed. Deleting it destroys all of that. `--items` therefore has
+to be asked for explicitly, and even then an item with **no** `tractionrec_id`
+is never touched — those are hand-authored pages this service did not create.
+
+After a reset the hash ledger is gone too, so the next run rewrites every
+snapshot. That is the point; it just means the run takes full-sync time
+(~2 minutes for 212 records) rather than seconds.
+
+## Live Parsley runner (`npm run runner`)
+
+A development tool for `/test-page/`: every Parsley code block on that page is
+editable, and **Run** executes the edited code on Zesty's servers.
+
+```bash
+npm run runner        # http://127.0.0.1:8787 — leave it running while you use the page
+```
+
+**Why it needs a local process.** Parsley only runs on Zesty's servers, while
+a view renders, so a browser cannot execute it. Running code means writing it
+into a view, which needs the Zesty write token, and that token must never be in
+a public page. So the page posts the code to this process, which:
+
+1. writes it as a **draft** of the scratch view `/_runner/run.html` (never
+   published, so nothing reaches the live site);
+2. fetches `<stage>/test-page/?kroc_run=1` (the stage preview domain renders
+   drafts, so no publish is needed);
+3. returns what sits between this run's markers, or "Parsley error" on Zesty's
+   HTTP 500 build-error page.
+
+The test page's view opens with a run-mode branch: with `kroc_run=1` it renders
+only the scratch view's draft, otherwise the normal page. Running *inside* the
+page, rather than fetching the scratch view directly, gives the code a real
+`this` (the test page's item), so code reading `this.integration_test`
+runs as written. Parsley does not evaluate an include inside a false `if`, so a
+crashing draft cannot break the normal page. Verified 2026-10-01; live, the
+same URL shows only the scratch view's published placeholder comment.
+
+**Safety.** It binds to `127.0.0.1` only. It refuses any `Origin` except the
+instance's domain and its two stage domains, so another website you visit
+cannot drive it. It requires a JSON body, which forces a CORS preflight. It
+never publishes. The only trace a run leaves is one dev version on the scratch
+view.
+
+**Browser notes.** Chrome (142+) asks once to let the page reach your local
+network: allow it, or Run reports "runner offline". Safari blocks pages from
+calling `http://127.0.0.1`, so use Chrome or Firefox. If the browser runs on a
+different machine from this process (e.g. VS Code Remote), forward port 8787;
+VS Code does this automatically for a port started in its terminal.
+
+**Limits.** Zesty's build-error page has no line number or message, so a
+crash is reported as a crash and nothing more. Scripts in the output do not run
+(the output frame is sandboxed). `this` is the test page item, which has no
+`tractionrec_id`, so detail-page examples use a literal id.
 
 ## Reading a run
 
