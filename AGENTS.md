@@ -45,6 +45,7 @@ src/zesty/              SDK connection, model + item indexes
 src/parsley-runner.js   /test-page/'s live Parsley runner (dev tool, unrelated to the sync)
 zesty-models/*.json     the nine dataset specs, numbered in creation order (read at runtime)
 .gcloudignore           what a deploy uploads: src/, zesty-models/, package files
+deploy/                 secrets.sh (Secret Manager from .env), alerts.sh (email alert)
 test/                   unit tests (npm test) + scenarios/ (live, see §6)
 archive/file-sync/      the archived file sync (README there)
 ```
@@ -148,6 +149,7 @@ npm start                              # the function locally (functions-framewo
 | Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
 | Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the four secrets below |
 | Secrets (Secret Manager) | `tr-client-id`, `tr-client-secret`, `zesty-instance-token`, `sync-trigger-key`; created from `.env` by `deploy/secrets.sh` (`--rotate` to replace, e.g. a new Zesty token) |
+| Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email **japhethlouie@gmail.com**, created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested 2026-10-30 with a deliberately invalid run (HTTP 500, `sync.failed`) |
 | Schedule | Cloud Scheduler job `kroc-tractionrec-sync-daily` (us-west1): **00:00 America/Phoenix daily**, POST, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
 
 **Verified on deploy:**
@@ -244,8 +246,6 @@ gcloud functions deploy kroc-tractionrec-sync \
 
 ## 8. Open items
 
-- **An error alert:** a log-based alert on `sync.done` with `errorCount > 0`,
-  or on `sync.failed`, emailed to someone. Not set up yet: needs a recipient.
 - The org's daily API budget is unknown (`/limits` is disabled for the
   integration user). A run is about 11 Traction Rec calls, plus one per 200
   re-read ids. Once a day is well within any normal budget.

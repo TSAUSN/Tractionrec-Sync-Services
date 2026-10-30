@@ -158,8 +158,8 @@ a browser fetch later is documented in [dataset-storage.md](dataset-storage.md)
 
 ## 5. Open items and risks
 
-- **An error alert** on runs that report errors, emailed to someone. Not set
-  up yet: needs a recipient.
+- **Errors are emailed** to japhethlouie@gmail.com: a run with errors, a failed
+  run, or a failed scheduled call.
 - **Editors can edit dataset items in the Manager.** Zesty has no read-only
   field. An edit holds until that record next changes in Traction Rec.
 - **Freshness is once a day.** A class whose registration window closes
