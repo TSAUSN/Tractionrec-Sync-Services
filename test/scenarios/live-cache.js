@@ -9,7 +9,7 @@
  * Needs the site code published to the live domain first (the catalog page
  * views, components and views/datasets/*.json). The live domain sits behind
  * two Varnish layers that cache pages even with cache-control: no-cache
- * (x-cache: MISS, HIT seen 2026-10-29), so a dataset publish has to purge the
+ * (x-cache: MISS, HIT seen), so a dataset publish has to purge the
  * pages that read the dataset — this checks that it does.
  *
  * What it does, on one real active class:

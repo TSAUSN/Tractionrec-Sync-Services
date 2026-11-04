@@ -1,8 +1,8 @@
 # Storing Traction Rec in Zesty datasets
 
-*Status (29 October 2026): **this is the sync.** The nine models exist, the sync (`src/datasets/`, §3) fills them and creates the catalog page items, and every catalog page and membership block reads them (§4). The first version, the file sync, is archived (`archive/file-sync/`). Not deployed yet.* The question:
+*Status: **this is the sync.** The nine models exist, the sync (`src/datasets/`, §3) fills them and creates the catalog page items, and every catalog page and membership block reads them (§4). The first version, the file sync, is archived (`archive/file-sync/`). Not deployed yet.* The question:
 could the sync store Traction Rec records as **Zesty dataset items** instead of
-JSON files under `/tractionrec/`? Japheth's direction: nested arrays become
+JSON files under `/tractionrec/`? The direction: nested arrays become
 **child datasets**, and every reference is a **one-to-one relation**, not a
 Traction Rec id. The one many-to-many link, program ↔ category, is a
 `one_to_many`; there are no junction datasets.
@@ -13,12 +13,12 @@ how the dataset sync works, and what the site would have to change. The model
 specs are in [`zesty-models/`](../zesty-models/).
 
 Moving the site onto the datasets reverses two earlier decisions: Traction Rec
-data stays out of Zesty fields (2026-09-30), and nested `__r` objects are not
-flattened (2026-10-02).
+data stays out of Zesty fields, and nested `__r` objects are not
+flattened.
 
 ## 1. What the probes showed
 
-Tested 2026-10-19 on two throwaway datasets, with real records (a 2,131-character
+Tested on two throwaway datasets, with real records (a 2,131-character
 course rich description and a class deep link). Everything was written through the
 instance API and rendered on stage through `/test-page/`'s Parsley runner.
 
@@ -118,7 +118,7 @@ About **387 items**, on the same publishing gates the files use today.
   Session, a class needs only the name, the season and the course, so the first
   two are flattened and the course is a relation. Membership type's
   `Product__r.Price_Description__c` moves to `tr_products`.
-- **Many-to-many is the one `one_to_many`** (Japheth 2026-10-19: no junction
+- **Many-to-many is the one `one_to_many`** (no junction
   dataset). Traction Rec links programs to categories through the
   `TREX1__Program_Category_Tag__c` junction, and a one_to_one holds a single
   ZUID, so `tr_programs.program_categories` holds the categories' ZUIDs as a
@@ -155,7 +155,7 @@ About **387 items**, on the same publishing gates the files use today.
 
 ## 3. The sync
 
-Built 2026-10-19 in `src/datasets/`. Since 2026-10-29 it is **the** sync:
+Built in `src/datasets/`, it is now **the** sync:
 - the file sync is archived;
 - `src/index.js` (the HTTP function) and `src/cli.js` run this one;
 - it also creates the catalog page items.
@@ -165,8 +165,7 @@ The repo's `AGENTS.md` §2–3 has the full rules. In short:
 - **It re-reads the whole published set on every run, never incrementally.**
   The class gate (`TREX1__Course_Online_Availability__c`) is a time-based
   formula: a class leaves the set when its registration window closes, and
-  enters it when one opens, without the record being modified (verified
-  2026-10-29).
+  enters it when one opens, without the record being modified.
 - **It plans each row and writes only what changed.** Plans are pure
   (`plan.js`). `sync_hash` covers every written field, relations and
   `active` included, so a quiet run writes nothing.
@@ -185,7 +184,7 @@ The repo's `AGENTS.md` §2–3 has the full rules. In short:
 
   It flips back to `active = 1` when Traction Rec publishes it again.
   "Known" includes the catalog page items: the 20 old class pages that never
-  had a row got an inactive one on 2026-10-29.
+  had a row got an inactive one.
 - **Page items** (`pages.js`):
   - **Created** for published records whose parent has a page, at the
     **root** (no `parentZUID`, like the 300+ existing pages). They hold only
@@ -196,7 +195,7 @@ The repo's `AGENTS.md` §2–3 has the full rules. In short:
     are needed.
 - **Relations are checked by the sync,** since Zesty validates none.
 
-**Verified 2026-10-29:**
+**Verified:**
 - **First run with the lifecycle:** every item gained the new fields, with 0
   errors and 297 s. It made 24 classes, 2 programs, 4 products and 6 price
   levels inactive.
@@ -209,9 +208,9 @@ The repo's `AGENTS.md` §2–3 has the full rules. In short:
 - Publishing the site code to the live domain and running the live-cache
   check.
 
-## 4. How the site reads it (built 2026-10-20)
+## 4. How the site reads it
 
-All the Traction Rec readers on the site moved to the datasets on 2026-10-20:
+All the Traction Rec readers on the site moved to the datasets:
 the five catalog page views (`categories_page`, `categories`, `programs`,
 `courses`, `classes`) and the two membership blocks (`[membership_tiers]`,
 `[day_pass_passes]`). **No page fetches anything.** Each view loops the
@@ -256,28 +255,28 @@ A repeater can't hold a relation, so the row keeps the Traction Rec Id, and
   and 9 categories, about 43 KB), and most of the time is the 66 page
   `getUrl()` lookups. The live domain caches the page.
 
-Japheth accepted the 3 s for now (2026-10-20).
+The 3 s is accepted for now.
 
 ### If the class finder moves to a browser fetch
 
 If the root page gets too slow (more classes, or caching that doesn't help),
 only the finder needs to change. The category grid is small and can stay
-server-side. The options, as measured on 2026-10-19 and 10-20:
+server-side. The options, as measured:
 
 | Source | Works for the finder? | Catch |
 | --- | --- | --- |
 | `/-/instant/<6-zuid>.json` | yes: rows carry `meta.zuid`, and relations come back as `{data:[{zuid}]}` | the URL needs the **model ZUID**, which differs on every Kroc instance; emit it from Parsley (e.g. a `toJson()` of one row carries `meta.model.zuid`) rather than hardcoding it. Responses carry a lot of metadata |
 | `/-/gql/<model>.json` | no, not alone: rows have no ZUID, so relations (ZUIDs) can't be joined | addressed by model name, so portable |
-| a custom JSON view (e.g. `/datasets/finder.json`) printing the same rows | yes: reuse the snippets, `fetch()` it | a new endpoint, which needs Japheth's OK (rule of 2026-10-05); it costs the same render time, but out of the page's critical path |
-| the `/tractionrec/` tier files | no longer | the file sync that wrote them is archived (2026-10-29) |
+| a custom JSON view (e.g. `/datasets/finder.json`) printing the same rows | yes: reuse the snippets, `fetch()` it | a new endpoint, which needs approval first; it costs the same render time, but out of the page's critical path |
+| the `/tractionrec/` tier files | no longer | the file sync that wrote them is archived |
 
 Whichever is used, `krocFinderFeed(ds)` (`classfinder.jsx`) takes a `krocDs`
 bundle, so the fetch only has to rebuild that bundle.
 
 ## 5. Open decisions
 
-- **Migration: done.** Every site reader moved to the datasets on 2026-10-20,
-  and the file sync was archived on 2026-10-29. Its `/tractionrec/` views are
+- **Migration: done.** Every site reader moved to the datasets,
+  and the file sync was archived. Its `/tractionrec/` views are
   still on the instance, unread. The page-model mirror fields (copied Traction
   Rec values) are no longer written; removing them from the models is a later
   clean-up.
@@ -285,12 +284,12 @@ bundle, so the fetch only has to rebuild that bundle.
   The model and field descriptions say the sync owns them, and the sync
   overwrites on the next change, but not before.
 
-The probe models ("ZZ Probe TR Parent/Child (delete me)") were deleted on
-2026-10-19 with `zesty-model.mjs delete`.
+The probe models ("ZZ Probe TR Parent/Child (delete me)") were deleted
+with `zesty-model.mjs delete`.
 
 ## Creating the models
 
-**Created 2026-10-19.** Each was dry-run first, and `show` matches its spec field
+**Created.** Each was dry-run first, and `show` matches its spec field
 for field:
 
 | Model | ZUID |
@@ -339,7 +338,7 @@ created yet fails with "related model not found". That's expected; dry-run
 Generated from [`zesty-models/`](../zesty-models/). The four sync fields that
 end every model (`last_modified_date`, `system_modstamp`, `sync_hash`,
 `synced_at`) are left out. `tractionrec_id` and `name` are required. `active`
-and `inactive_reason` were added to every model on 2026-10-29 (§3).
+and `inactive_reason` were added to every model (§3).
 
 
 **`tr_program_categories`** (12 fields)

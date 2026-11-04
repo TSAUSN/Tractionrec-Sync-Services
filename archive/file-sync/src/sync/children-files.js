@@ -15,7 +15,7 @@ const { titleFor, hash } = require("./shape");
  *
  * The REST shape: a child collection under its parent. The parent's own record
  * is `<parentTier>/<parentId>.json`, so one name is both a file and a folder;
- * verified 2026-10-02 that Zesty serves both and Parsley reads both.
+ * verified that Zesty serves both and Parsley reads both.
  *
  * They exist so a page can read only its own children instead of filtering a
  * whole tier file. They are DERIVED: built in the same run, from the same rows,
@@ -37,7 +37,7 @@ const { titleFor, hash } = require("./shape");
  *   - Rows are sorted by display name, then Id, so the same members always
  *     produce the same bytes and the same hash.
  *
- * Verified 2026-10-02: Traction Rec's category <-> program link object
+ * Verified: Traction Rec's category <-> program link object
  * (TREX1__Program_Category_Tag__c) carries no data of its own, only the two
  * lookups and TREX1__Legacy_Id__c, so a program's row is identical in every
  * category file. If it ever gains a per-link field (display order, "primary"),

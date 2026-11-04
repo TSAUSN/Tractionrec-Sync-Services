@@ -30,7 +30,7 @@ const { connect, ok } = require("./zesty/client");
 const { indexModels, indexItems } = require("./zesty/items");
 const log = require("./logger");
 
-/** The SDK has no deleteView, but the API supports it. Verified 2026-09-30. */
+/** The SDK has no deleteView, but the API supports it. Verified. */
 async function deleteView(zesty, zuid) {
   return ok(await zesty.instance.deleteRequest(`/web/views/${zuid}`), `deleteView ${zuid}`);
 }

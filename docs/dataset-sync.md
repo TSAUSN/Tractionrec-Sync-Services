@@ -1,6 +1,6 @@
 # Traction Rec → Zesty datasets: review report
 
-*20 October 2026, updated 29 October · kroc-tractionrec-sync + Kroc-Center-Template*
+*kroc-tractionrec-sync + Kroc-Center-Template*
 
 ## Summary
 
@@ -10,7 +10,7 @@ now lives in **nine Zesty datasets** (`tr_*`), filled by a **new sync**. The
 catalog pages and the membership blocks read those datasets directly in
 Parsley.
 
-- **The old file sync is archived** (`archive/file-sync/`, 2026-10-29). The
+- **The old file sync is archived** (`archive/file-sync/`). The
   new sync also took over its other job: creating the catalog's page items.
 - **Records that leave Traction Rec are marked inactive, never deleted.** This
   covers a closed registration window, a removed record and a lost parent.
@@ -20,7 +20,7 @@ Parsley.
   changed in Traction Rec since the files were last written.
 - **No page fetches anything.** Each page gets its Traction Rec data in the
   HTML it is served.
-- **Deployed 2026-10-30.** It's an HTTP Cloud Function in Google Cloud
+- **Deployed.** It's an HTTP Cloud Function in Google Cloud
   project `kroc-services` (us-west1), called by Cloud Scheduler **daily at
   midnight, Phoenix time**. The site code is published to the live domain,
   and a published data change reaches the live pages through their cache in
@@ -151,14 +151,14 @@ a browser fetch later is documented in [dataset-storage.md](dataset-storage.md)
 | Class finder filters | counts match an independent server-side count |
 | Membership blocks | identical: prices, family rules, `{fee}` fine print |
 | Hidden class pages | still redirect to their course |
-| Lifecycle run (2026-10-29) | every item gained `active` / `inactive_reason`, 0 errors; the repeat wrote 0 |
+| Lifecycle run | every item gained `active` / `inactive_reason`, 0 errors; the repeat wrote 0 |
 | Inactive pages | ended class shows "Registration closed", no Register; its course page no longer lists it; old empty class pages now show their details as closed |
 | Scenarios: real sync vs real instance, Traction Rec simulated | 13 of 13 steps: new records + pages, zero-write repeat, field and price change, rename (slug kept), re-parent, registration closes, comes back, removed, lost parent, membership no longer sold, unused prices, steady state, cleanup |
 | Unit tests | 42 pass |
 
 ## 5. Open items and risks
 
-- **Errors are emailed** to japhethlouie@gmail.com: a run with errors, a failed
+- **Errors are emailed** to the `ALERT_EMAIL` address (`deploy/config.sh`): a run with errors, a failed
   run, or a failed scheduled call.
 - **Editors can edit dataset items in the Manager.** Zesty has no read-only
   field. An edit holds until that record next changes in Traction Rec.
@@ -174,4 +174,3 @@ a browser fetch later is documented in [dataset-storage.md](dataset-storage.md)
 - [dataset-storage.md](dataset-storage.md): the design, the instance
   measurements behind it, the full field list, and the browser-fetch option.
 - The repo's `AGENTS.md`: the sync's rules, commands and tests in one page.
-- The site's `AGENTS.md` §3 and §5: the template patterns.

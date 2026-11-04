@@ -3,7 +3,7 @@
 /**
  * Traction Rec value -> the value a Zesty field of a given datatype stores.
  *
- * Every rule here comes from the probes of 2026-10-19
+ * Every rule here comes from the probes
  * (docs/dataset-storage.md §1), where the instance API was tried with each
  * shape Salesforce returns:
  *

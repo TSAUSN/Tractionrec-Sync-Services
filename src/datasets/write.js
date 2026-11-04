@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Dataset item writes. Shapes verified on tr_products 2026-10-19:
+ * Dataset item writes. Shapes verified on tr_products:
  *
  *   create   POST, no meta (the SDK strips it); the item is listed by default
  *            and is version 1

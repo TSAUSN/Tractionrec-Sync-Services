@@ -1,11 +1,11 @@
 # Traction Rec in Zesty — end to end
 
-*As of 9 October 2026, updated 20 October.* How Traction Rec data gets into the
+How Traction Rec data gets into the
 Zesty instance and how the site reads it, tier by tier, with how memberships
 differ from the class catalog. Brief on purpose: it links to the detailed docs
 instead of repeating them.
 
-> **Since 2026-10-20 the site reads the `tr_*` datasets, not these files.** A
+> **The site now reads the `tr_*` datasets, not these files.** A
 > second, separate dataset sync (`src/datasets/`) fills nine Zesty datasets, and
 > every catalog page and both membership blocks loop them in Parsley; nothing is
 > fetched. The file sync described here still runs, and only `/test-page/` reads
@@ -71,7 +71,7 @@ Salesforce Id, a unique path part, and a seeded parent link. It never updates
 or deletes an item afterwards; a record that leaves Traction Rec is reported,
 not removed. URL, SEO, layout and editorial fields belong to Zesty.
 
-**How each page read its data until 2026-10-20** (inlined at render time; now
+**How each page read its data before the datasets** (inlined at render time; now
 replaced by dataset loops, [dataset-storage.md](dataset-storage.md) §4):
 
 | Page view | Includes | Fetched client-side |
@@ -149,4 +149,4 @@ field once the org adds one.
 | Price | level `amount` (member / non-member) | schedule or level `initialFee`, by kind |
 | Zesty still owns | hero, icon, intro, type, location, tags | headings, fine-print wording, name override, order |
 
-The same data stored as Zesty datasets instead of files (a separate dataset sync fills them since 2026-10-19; the site doesn't read them yet) is covered in [dataset-storage.md](dataset-storage.md).
+The same data stored as Zesty datasets instead of files (a separate dataset sync fills them; the site doesn't read them yet) is covered in [dataset-storage.md](dataset-storage.md).

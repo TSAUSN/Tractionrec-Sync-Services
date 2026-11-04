@@ -5,7 +5,7 @@
  * classes): one page per published category, program, course and class,
  * which the tr_* row points at through its `page` relation.
  *
- * Created by this sync (2026-10-29; the archived file sync did it before):
+ * Created by this sync (the archived file sync did it before):
  *   - in the same run as the record's dataset row, before the row is planned,
  *     so the `page` relation is set at once;
  *   - for a PUBLISHED record whose parent already has a page — a program with
@@ -14,19 +14,19 @@
  *   - with only: tractionrec_id, the title field, and web.pathPart / metaTitle
  *     / metaLinkText. NO parentZUID: every catalog page is at the root
  *     (/class-name/), like the 300+ pages already there (parentZUID null);
- *     a parentZUID nests the URL under the parent's (found 2026-10-29). The
+ *     a parentZUID nests the URL under the parent's. The
  *     parent's slug is only used to tell two same-named pages apart. Nothing else from Traction Rec is copied
  *     into page fields: the site reads the tr_* rows, and a copy would only go
  *     stale. Editorial fields (hero, icon, intro…) are the editors'. None of
- *     them is required any more (cleared 2026-10-29), so no placeholder values
+ *     them is required any more, so no placeholder values
  *     are needed.
  *
  * Kept in step afterwards — on a RENAME in Traction Rec only:
  *   - the title field, web.metaTitle and web.metaLinkText (the browser tab and
  *     search result title, which the site's code can't override: the <head> is
  *     not editable). An editor's own SEO title survives until the next rename.
- *   - ⚠ NEVER the URL slug (web.pathPart) or anything else sensitive (Japheth
- *     2026-10-29): changing a URL breaks every link to the page. A renamed
+ *   - ⚠ NEVER the URL slug (web.pathPart) or anything else sensitive:
+ *     changing a URL breaks every link to the page. A renamed
  *     class keeps its original URL.
  *
  * Path parts are unique across all four models (they share one root

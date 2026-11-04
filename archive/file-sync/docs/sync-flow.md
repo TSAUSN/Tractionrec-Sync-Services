@@ -204,7 +204,7 @@ the next run rewrites every snapshot once and carries on.
 **Parsley parses view source, including inside strings.** A Zesty view is a
 template, not a static file, and a literal double-open-curly is evaluated as
 markup *wherever it appears* — a stray one inside a JS comment in `loader` took
-down every page on the instance on 2026-09-18. Traction Rec rich-text is
+down every page on the instance. Traction Rec rich-text is
 hand-pasted HTML, so this is a live risk, not a theoretical one.
 `parsleySafeJson()` rewrites the sequence to `{{`: a JSON parser
 resolves it back to the original characters, and Parsley only ever sees six
@@ -225,7 +225,7 @@ that is a URL-architecture decision, not a sync one.
 **Parsley can render Traction Rec data server-side, three ways with different
 limits — including one that makes real HTTP calls.** `api.json.get(url)`
 fetches any URL, external domains included, and iterates it: so the claim that
-Parsley has no outbound HTTP is **wrong** (corrected 2026-09-30). It still
+Parsley has no outbound HTTP is **wrong**. It still
 cannot reach Traction Rec — no headers, GET-only, and a view is public — so the
 proxy remains mandatory, but the reason changed. Fetched JSON must be a root
 array of **flat** rows: reading a nested-object value crashes the page, a dead
@@ -236,14 +236,13 @@ for `{this.*}` and `{get_var.*}` but not loop aliases or `$` variables, and a
 missing file renders empty rather than erroring. `json()` walks JSON held in a
 content **field**: a top-level array iterates, nested arrays do not, dotted
 scalars work, and a `where` clause on such a loop is **silently ignored**. The
-two do not compose — `json()` cannot parse what `include` inlines. Tested
-2026-09-30; this is the basis of
+two do not compose — `json()` cannot parse what `include` inlines. Tested; this is the basis of
 [relationships-without-zesty-fields.md](relationships-without-zesty-fields.md).
 
 **A view's filename needs a leading slash.** Every `ajax-json` view that
 serves on the live domain has one. A view created as `tractionrec/x.json` is
 accepted by the API, reports `status: live`, appears correctly in the Manager —
-and 404s on every request. Verified the hard way on 2026-09-25; `viewPath()`
+and 404s on every request. Verified the hard way; `viewPath()`
 now normalises both the paths written and the index they are looked up in, so
 a lookup cannot miss on the form of the string alone.
 
@@ -256,7 +255,7 @@ this service exists to produce. Every create and update is followed by a
 
 ## 6. The freshness trade-off — read this before scheduling
 
-`tractionrec-integration-spec.md` §3.1 recorded that five fields must **not**
+Five fields must **not**
 be stored: availability, spots remaining, capacity, price and the deep link.
 The reasoning stands: a cached "3 spots left" that tells a parent a full class
 is open is worse than no number at all.
@@ -286,7 +285,7 @@ Option 1 is the recommendation until someone asks for a live spot count.
 
 ## 7. What has to exist before the first run
 
-### Per tier, as of 2026-09-28
+### Per tier
 
 | | `tractionrec_id` | Required fields the service cannot supply | Seed template needed |
 | :--- | :--- | :--- | :--- |

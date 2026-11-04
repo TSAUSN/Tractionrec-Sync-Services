@@ -15,7 +15,7 @@
  * datasets, the page items and the stage pages show. Real records are served
  * exactly as Traction Rec has them, so they must stay unchanged throughout.
  *
- * It WRITES to the instance (allowed while testing, Japheth 2026-10-29): SIMTEST
+ * It WRITES to the instance (allowed while testing): SIMTEST
  * dataset items and SIMTEST page items, which are published, so they show on
  * the stage site during the run. They are all deleted at the end (and at the
  * start, in case a previous run stopped half way), then one real sync run must

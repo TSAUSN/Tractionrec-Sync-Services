@@ -96,7 +96,7 @@ const bool = (v, dflt) => (v === undefined || v === "" ? dflt : v === "1" || v =
 /**
  * Views are written under this folder: /tractionrec/<tier>/<trId>.json
  *
- * The LEADING SLASH is load-bearing. Verified 2026-09-25: every ajax-json view
+ * The LEADING SLASH is load-bearing. Verified: every ajax-json view
  * that serves on the live domain has one, and a view created without it is
  * accepted by the API, reports `status: live`, and then 404s on every request.
  */
@@ -321,7 +321,7 @@ const TIERS = {
         "TREX1__Product__c",
         "TREX1__Total_Billing_Schedule_Amount__c",
         "TREX1__Initial_Fee_Amount__c",
-        // Member / Non-Member. Verified 2026-09-28: on class price levels this
+        // Member / Non-Member. Verified: on class price levels this
         // is populated and pairs cleanly (24 Member / 25 Non-Member across the
         // publishable set), so the card can label both rather than guess.
         "TREX1__Price_Type__c"
@@ -330,7 +330,7 @@ const TIERS = {
   },
 
   /**
-   * Memberships are FILES ONLY: no Zesty model, no items (Japheth 2026-10-08).
+   * Memberships are FILES ONLY: no Zesty model, no items.
    * Nothing in the design gives a membership its own page; the Membership and
    * Day Pass pages show them as cards in [membership_tiers] / [day_pass_passes],
    * whose rows point at a membership type by its Traction Rec id.
@@ -423,7 +423,7 @@ const TIERS = {
     parentVia: { lookup: "TREX1__Category__c" },
     /**
      * Membership Type -> Product -> Price Level -> Planned Billing Schedule.
-     * Where the real amount sits depends on the kind (verified 2026-10-08):
+     * Where the real amount sits depends on the kind:
      *
      *   one-time (Annual, 1 Month)  schedule Amount, Term Type "One Time"
      *   Autopay                     schedule Amount, Term Type "Monthly"

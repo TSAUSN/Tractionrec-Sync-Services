@@ -27,8 +27,7 @@ fetches.
 
 A Zesty view can't call Traction Rec: Parsley's `api.json.get()` sends no
 headers, minting a token is a POST, and a view is a public URL, so the client
-secret could never live in one. The full argument is in
-`KROC-draft/tractionrec-integration-spec.md`.
+secret could never live in one.
 
 ## Quick start
 
@@ -48,4 +47,4 @@ npm run sync -- --live --summary   # write + publish
 | [AGENTS.md](AGENTS.md) | **start here**: what a run does, the rules, commands, tests, verified facts and open items, in one page |
 | [docs/dataset-sync.md](docs/dataset-sync.md) | reviewer report: the sync, how Traction Rec maps onto the `tr_*` datasets, how the site uses them, verification and open items |
 | [docs/dataset-storage.md](docs/dataset-storage.md) | the design and the instance measurements behind it, the model tree, the browser-fetch option for the class finder, the field appendix |
-| [archive/file-sync/](archive/file-sync/README.md) | the first version, which wrote JSON files under `/tractionrec/`; archived 2026-10-29, not used |
+| [archive/file-sync/](archive/file-sync/README.md) | the first version, which wrote JSON files under `/tractionrec/`; archived, not used |

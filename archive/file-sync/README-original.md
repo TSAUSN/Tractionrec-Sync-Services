@@ -35,9 +35,8 @@ it is.
 
 A Zesty view cannot call Traction Rec, so something outside Zesty has to.
 
-⚠️ **The reason recorded in the spec is wrong** (corrected 2026-09-30). It says
-Parsley has no outbound HTTP. Parsley *does* — `api.json.get(url)` fetches any
-URL server-side, including external domains. The real blockers are narrower and
+⚠️ **Parsley does have outbound HTTP**, contrary to an earlier assumption:
+`api.json.get(url)` fetches any URL server-side, including external domains. The real blockers are narrower and
 still decisive:
 
 - `api.json.get()` sends **no headers**, and Traction Rec returns 401 for
@@ -51,7 +50,7 @@ still decisive:
 So the service is still the only option — but Parsley *can* read the JSON this
 service publishes, which is what
 [relationships-without-zesty-fields.md](docs/relationships-without-zesty-fields.md)
-builds on. Full argument: `KROC-draft/tractionrec-integration-spec.md`.
+builds on.
 
 ---
 
@@ -62,7 +61,7 @@ builds on. Full argument: `KROC-draft/tractionrec-integration-spec.md`.
 | [docs/how-it-works.md](docs/how-it-works.md) | one-page, non-technical overview for executives: how the sync works, who edits what, the constraints |
 | [docs/tractionrec-in-zesty.md](docs/tractionrec-in-zesty.md) | technical, end to end: each tier from Traction Rec object to file to Zesty model/block to page, and how memberships (files only) differ from the catalog |
 | [docs/dataset-sync.md](docs/dataset-sync.md) | review report: the new dataset sync, how Traction Rec maps onto the `tr_*` datasets, and how the site uses them; verification and open items |
-| [docs/dataset-storage.md](docs/dataset-storage.md) | built 2026-10-19; the site reads the datasets since 2026-10-20; the dataset sync runs locally, not deployed: storing Traction Rec as Zesty datasets (child datasets, one-to-one relations) instead of files. Probe results, the model tree and what the sync and site would change; specs in [zesty-models/](zesty-models/) |
+| [docs/dataset-storage.md](docs/dataset-storage.md) | built; the site reads the datasets; the dataset sync runs locally, not deployed: storing Traction Rec as Zesty datasets (child datasets, one-to-one relations) instead of files. Probe results, the model tree and what the sync and site would change; specs in [zesty-models/](zesty-models/) |
 | [AGENTS.md](AGENTS.md) | **start here** — the current output shape, the rules, commands, verified facts and open items, in one page |
 | [docs/sync-flow.md](docs/sync-flow.md) | how a run works, the reconcile decision table, change detection, the freshness trade-off, the pre-flight checklist |
 | [docs/data-mapping.md](docs/data-mapping.md) | Traction Rec object → Zesty model → snapshot shape, field by field, plus the gaps in the source data |

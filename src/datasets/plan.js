@@ -13,12 +13,12 @@
  *              when it was removed. These become active = 0 with a reason.
  * A published record whose required parent can't be resolved is also written
  * as active = 0, with the parent as the reason. Nothing is ever deleted or
- * skipped (2026-10-29): the item stays, the site hides it, and it flips back to
+ * skipped: the item stays, the site hides it, and it flips back to
  * active = 1 when Traction Rec publishes it again.
  *
  * Relations are resolved here, because Zesty resolves nothing: a one_to_one
- * accepts any string, a ZUID that does not exist included (probed
- * 2026-10-19). An inactive row whose parent can't be resolved keeps the
+ * accepts any string, a ZUID that does not exist included (probed).
+ * An inactive row whose parent can't be resolved keeps the
  * relation it had; it is never written with a guess.
  *
  * Change detection: `sync_hash` on the item is the hash of every other field

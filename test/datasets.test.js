@@ -225,7 +225,7 @@ test("program categories come from the junction and are written as a one_to_many
   assert.equal(untagged.create[0].data.inactive_reason, "No program_categories in Traction Rec");
 });
 
-// --- lifecycle (2026-10-29): nothing is deleted, rows become inactive ----------
+// --- lifecycle: nothing is deleted, rows become inactive ----------
 
 const itemsOf = (data, zuid = "7-course") => ({
   byTrId: new Map([[data.tractionrec_id, { meta: { ZUID: zuid }, data: { ...data } }]]),

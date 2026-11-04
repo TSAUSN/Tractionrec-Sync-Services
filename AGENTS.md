@@ -16,11 +16,11 @@ Traction Rec's published catalog and memberships into the KROC Zesty instance
 
 Traction Rec is a Salesforce managed package (`TREX1__…`) and the system of
 record; the sync is one-way and read-only towards it. **It has no schedule of
-its own: a separate service calls it.** The site (`../Kroc-Center-Template`,
-see its `AGENTS.md` §5) reads the datasets in Parsley.
+its own: a separate service calls it.** The site (`../Kroc-Center-Template`)
+reads the datasets in Parsley.
 
 The first version, which wrote JSON files under `/tractionrec/`, is archived
-in `archive/file-sync/` (2026-10-29). Nothing in `src/` or `test/` uses it.
+in `archive/file-sync/`. Nothing in `src/` or `test/` uses it.
 
 ---
 
@@ -73,13 +73,13 @@ archive/file-sync/      the archived file sync (README there)
    `pagesCreated / pagesRenamed`, `warnings`, `errors`, plus `errorCount`.
    **Alert on `errorCount`, not on the HTTP status.**
 
-Timing: a quiet run takes about 16 s and writes nothing. The 2026-10-29 run
+Timing: a quiet run takes about 16 s and writes nothing. The run
 that added the lifecycle fields to every item took 297 s. The function limit is
 540 s.
 
-## 3. Rules (each decided by Japheth or learned the hard way)
+## 3. Rules (each a decision or learned the hard way)
 
-1. **Nothing is ever deleted** (2026-09-25, 2026-10-29). A record that
+1. **Nothing is ever deleted**. A record that
    leaves the published set becomes **`active = 0`** with an
    **`inactive_reason`**, on all nine datasets. Ways to leave:
    - its registration window closes;
@@ -92,8 +92,7 @@ that added the lifecycle fields to every item took 297 s. The function limit is
    `active = 1`.
 2. **The class gate is a formula, `TREX1__Course_Online_Availability__c`**:
    empty = registrable online. It changes by **time**, when a registration
-   window opens or closes, without the record being modified (verified
-   2026-10-29). So every run re-reads the full set. Its text is the
+   window opens or closes, without the record being modified. So every run re-reads the full set. Its text is the
    `inactive_reason`.
 3. **Relations are checked by the sync.** Zesty validates nothing (a
    one-to-one accepts any string). An unresolved required parent makes the
@@ -115,12 +114,11 @@ that added the lifecycle fields to every item took 297 s. The function limit is
      reads the `tr_*` rows.
    - **On a rename**, only the title field, `metaTitle` and `metaLinkText`
      follow.
-   - ⚠ **The URL slug and anything else sensitive are never changed**
-     (Japheth 2026-10-29): a changed URL breaks every link to the page. A
+   - ⚠ **The URL slug and anything else sensitive are never changed**:
+     a changed URL breaks every link to the page. A
      renamed class keeps its original URL.
-   - The page models' editorial fields are **not required** (cleared
-     2026-10-29), so pages are created without placeholder values. Leave them
-     optional (see the site's `AGENTS.md`).
+   - The page models' editorial fields are **not required**, so pages are created without placeholder values. Leave them
+     optional.
 6. **The schema is created by hand, never by the sync.** Edit
    `zesty-models/*.json`, create or extend with the site repo's
    `zesty-model.mjs`, then map in `definitions.js`. `npm test` fails until
@@ -143,7 +141,7 @@ npm start                              # the function locally (functions-framewo
 
 ## 5. Deploy
 
-**Deployed 2026-10-30 and running daily.**
+**Deployed and running daily.**
 
 | | |
 | --- | --- |
@@ -151,7 +149,7 @@ npm start                              # the function locally (functions-framewo
 | Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
 | Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the four secrets below |
 | Secrets (Secret Manager) | `tr-client-id`, `tr-client-secret`, `zesty-instance-token`, `sync-trigger-key`; created from `.env` by `deploy/secrets.sh` (`--rotate` to replace, e.g. a new Zesty token) |
-| Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email **japhethlouie@gmail.com**, created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested 2026-10-30 with a deliberately invalid run (HTTP 500, `sync.failed`) |
+| Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email to `ALERT_EMAIL` (`deploy/config.sh`), created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested with a deliberately invalid run (HTTP 500, `sync.failed`) |
 | Schedule | Cloud Scheduler job `kroc-tractionrec-sync-daily` (us-west1): **00:00 America/Phoenix daily**, POST, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
 
 **Verified on deploy:**
@@ -186,9 +184,9 @@ bash deploy/deploy.sh                    # everything, in order
 bash deploy/deploy.sh function check     # after a code change
 bash deploy/deploy.sh schedule           # after changing SCHEDULE / TIME_ZONE in config.sh
 bash deploy/secrets.sh --rotate && bash deploy/deploy.sh function schedule   # new values in .env
-A function deploy takes about 1.5 minutes. The flags it uses, and why:
-
 ```
+
+A function deploy takes about 1.5 minutes. The flags it uses, and why:
 
 - **`DRY_RUN=0` is required.** Its default is 1, which plans and writes
   nothing, so a deploy without it looks healthy but does nothing.
@@ -232,7 +230,7 @@ A function deploy takes about 1.5 minutes. The flags it uses, and why:
   The 13 steps: create, zero-write repeat, field + price change, rename (slug
   kept), re-parent, registration closes, comes back, removed, lost parent,
   membership not sold, derived rows, steady state, cleanup + real run. All 13
-  passed on 2026-10-29. It deletes every SIMTEST item at the end, and at the
+  passed. It deletes every SIMTEST item at the end, and at the
   start if a run stopped half way.
 - **Live cache** (`test/scenarios/live-cache.js`): checks that a published
   dataset change reaches the **live** pages through their Varnish cache, then
@@ -252,8 +250,7 @@ A function deploy takes about 1.5 minutes. The flags it uses, and why:
   `meta.listed: true` and returns its new version; the live domain shows only
   published versions.
 - Parsley reads the datasets with native loops (`where`, `sort`, `limit`
-  work); `filter()` reads single values. The rules are in the site repo's
-  `AGENTS.md` §3.
+  work); `filter()` reads single values.
 - The stage domain renders unpublished drafts. The live domain sits behind
   two Varnish layers that cache pages even with `cache-control: no-cache`.
 - `/test-page/` (the site repo's `webengine/views/test_page`) is the Parsley

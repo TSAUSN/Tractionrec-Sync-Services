@@ -23,8 +23,7 @@ platform objects (files, Chatter, sharing rules). Treat a leak of it as a
 personal-data incident, not as "someone can read our class list".
 
 This is also why the Zesty Integration field was ruled out: it puts the bearer
-token in a field config that anyone with CMS access can read. See
-`KROC-draft/tractionrec-integration-spec.md` §3.3.
+token in a field config that anyone with CMS access can read.
 
 ```bash
 # One secret per value; grant the function's service account accessor on each.
@@ -53,7 +52,7 @@ gcloud functions deploy kroc-tractionrec-sync \
 
 `--timeout=540s` is the gen-2 HTTP ceiling. A first full run into an empty
 folder writes 364 files (212 records, 4 tier files, 147 children files and the
-ledger), each a create plus a publish: **measured 230 s on 2026-10-02**. Once the hash
+ledger), each a create plus a publish: **measured 230 s**. Once the hash
 ledger exists, a steady-state run touches only what changed and finishes in
 seconds. If the first run does time out, it is safe to re-run — every write is
 keyed on the Traction Rec Id, so a partial run resumes rather than duplicates.
@@ -102,22 +101,20 @@ the CMS.
 ## Running it locally
 
 ```bash
-cp .env.example .env     # fill in from KROC-draft/"tractionrec creds.md"
+cp .env.example .env     # fill in the credentials
 npm install
 
 npm run sync:dry                 # plan everything, write nothing
 node src/cli.js --tiers=program_categories --dry
 node src/cli.js --tiers=program_categories --live   # 9 records: the safest first write
 
-# Verified working end to end on 2026-09-25: 9 items created and published,
+# Verified working end to end: 9 items created and published,
 # 9 snapshots serving at https://kroc.zesty.dev/tractionrec/program_categories/<id>.json,
 # and a second run reporting 9 unchanged with zero writes.
 npm test                         # the reconcile decision table
 ```
 
-`.env` is gitignored. Keep it that way — and note that
-`KROC-draft/tractionrec creds.md` is untracked but **not** gitignored, one
-`git add .` away from being committed.
+`.env` is gitignored. Keep it that way.
 
 ---
 
@@ -135,7 +132,7 @@ node src/reset.js --live --items       # ...AND the content items (see below)
 
 **Views are safe to delete.** Nothing but this service writes under
 `/tractionrec/`, and a sync rebuilds them. The SDK has no `deleteView`, but the
-API supports `DELETE /web/views/{zuid}` — verified 2026-09-30.
+API supports `DELETE /web/views/{zuid}` — verified.
 
 ⚠️ **Items are not.** An item carrying a `tractionrec_id` may since have gained
 a hero image, body copy or SEO text from an editor, and it owns a URL that may
@@ -173,7 +170,7 @@ only the scratch view's draft, otherwise the normal page. Running *inside* the
 page, rather than fetching the scratch view directly, gives the code a real
 `this` (the test page's item), so code reading `this.integration_test`
 runs as written. Parsley does not evaluate an include inside a false `if`, so a
-crashing draft cannot break the normal page. Verified 2026-10-01; live, the
+crashing draft cannot break the normal page. Verified; live, the
 same URL shows only the scratch view's published placeholder comment.
 
 **Safety.** It binds to `127.0.0.1` only. It refuses any `Origin` except the

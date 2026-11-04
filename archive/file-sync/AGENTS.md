@@ -17,12 +17,11 @@ Rec catalog into the KROC Zesty instance (`8-80c0bba6b8-lhkcc7`, served at
    `tractionrec_id` field. Zesty owns the URL, layout and editorial content;
    the item is the page.
 
-The site repo is `../Kroc-Center-Template` (see its `AGENTS.md`); design and
-architecture docs are in `../KROC-draft`.
+The site repo is `../Kroc-Center-Template`.
 
 ---
 
-## 1. What it writes (current shape, 2026-10-02)
+## 1. What it writes (current shape)
 
 ```
 /tractionrec/
@@ -42,11 +41,11 @@ architecture docs are in `../KROC-draft`.
 └── membership_types/{id}.json
 ```
 
-Catalog (2026-10-05): 364 files, 212 records (9 / 20 / 118 / 65), 4 tier files,
-147 children files and the ledger. Memberships (2026-10-08): 7 categories, 24
+Catalog: 364 files, 212 records (9 / 20 / 118 / 65), 4 tier files,
+147 children files and the ledger. Memberships: 7 categories, 24
 types, 2 tier files, 7 children files (3 of them `[]`).
 
-**Memberships are files only** (Japheth, 2026-10-08). Their tiers set
+**Memberships are files only**. Their tiers set
 `filesOnly: true` and have no `zestyModel`: no items are created or linked, so
 their rows carry no `meta.zestyItemZuid` / `zestyPath`. The design never gives
 a membership its own page; the site's `[membership_tiers]` and
@@ -77,7 +76,7 @@ children (88 do). Each is rebuilt from all rows on every run, never patched,
 which is what keeps many-to-many (category ↔ program) correct when a program
 is untagged. Rows are full copies, sorted by name then Id.
 
-**`meta.zestyPath`** (2026-10-05) is the URL of the row's Zesty page; the
+**`meta.zestyPath`** is the URL of the row's Zesty page; the
 site's catalog cards link with it. A URL changed in the Manager reaches the
 files on the next run: the ledger key for a record file is
 `fileKey` = hash(record hash, item ZUID, path).
@@ -98,15 +97,15 @@ with no Traction Rec changes writes nothing; check this after any change.
    there). Change the code, then re-run the sync. To restructure the output:
    `npm run reset:live`, then a live sync.
 2. **Items are created once, never updated, never deleted.** No automatic
-   deletion, ever: Japheth's explicit rule. An item may have gained editorial
+   deletion, ever: an explicit rule. An item may have gained editorial
    content and owns an indexed URL. `reset` deletes items only with
    `--items`, and never one without a `tractionrec_id`.
 3. **Keep Traction Rec's data and naming verbatim.** No renaming, no
    flattening. Nested `__r` objects stay nested and **JavaScript reads them**
-   (decided 2026-10-02: no flat projection for Parsley).
+   (decided: no flat projection for Parsley).
 4. **Don't copy Traction Rec data into Zesty fields** beyond `tractionrec_id`
    and the web/SEO identity Zesty owns. A field that looks editable but isn't
-   misleads editors (direction set 2026-09-30). Relationships come from the
+   misleads editors. Relationships come from the
    records in the files, not Zesty relational fields. The sync still seeds
    the old relational fields on create; removing that is pending
    (`docs/relationships-without-zesty-fields.md` §3–6).
@@ -124,7 +123,7 @@ with no Traction Rec changes writes nothing; check this after any change.
 7. **Dry-run first.** `.env` has `DRY_RUN=1`, so `npm run sync` only plans.
    Live: `DRY_RUN=0 npm run sync`. Show the plan before any live run that
    deletes.
-8. **Commit messages carry no AI attribution** (Japheth's rule).
+8. **Commit messages carry no AI attribution** (project rule).
 
 ## 3. Commands
 
@@ -171,8 +170,8 @@ docs/                       tractionrec-in-zesty.md (end to end, catalog vs memb
                             relationships-without-zesty-fields.md (the design, §2.0–2.0c),
                             sync-flow.md, data-mapping.md, operations.md
                             dataset-sync.md (review report: the dataset sync, mapping, site use),
-                            dataset-storage.md (datasets instead of files: built, the site reads them since
-                            2026-10-20; the dataset sync is not deployed)
+                            dataset-storage.md (datasets instead of files: built, the site reads them;
+                            the dataset sync is not deployed)
 zesty-models/               create specs for those datasets, numbered in creation order
 docs/backups/               the original test_page.integration_test value (§6)
 ```
@@ -207,7 +206,7 @@ docs/backups/               the original test_page.integration_test value (§6)
   versions; keep the highest.
 - `updateView` does not return the new version. Read it back before
   `publishView`, or the old version is re-published. This bug left every
-  refresh stale until 2026-09-30.
+  refresh stale until it was fixed.
 - Views are Parsley-processed, so a literal `{{` in content is rewritten by
   `parsleySafeJson`. There is no `deleteView` in the SDK, but
   `DELETE /web/views/{zuid}` works.
@@ -217,7 +216,7 @@ docs/backups/               the original test_page.integration_test value (§6)
   across all four (`paths.js`).
 
 **Traction Rec:** the category ↔ program link (`TREX1__Program_Category_Tag__c`)
-carries no data of its own (2026-10-02). If it gains a per-link field such as
+carries no data of its own. If it gains a per-link field such as
 display order, the children-file design must change. No program is in more
 than one category today, so the unit tests cover many-to-many with fixtures.
 
@@ -241,8 +240,8 @@ those rows.
 
 ## 7. Open items
 
-- **Relational fields:** the site's catalog pages read the files since
-  2026-10-05 and ignore the mirrored Zesty fields; the sync still seeds those
+- **Relational fields:** the site's catalog pages read the files
+  and ignore the mirrored Zesty fields; the sync still seeds those
   fields on create. Stop seeding them, then remove the fields (docs §3–6).
 - **Freshness:** the volatile fields (spots, price, availability, deep link)
   are cached at cron cadence. See `docs/sync-flow.md` §6 before scheduling.

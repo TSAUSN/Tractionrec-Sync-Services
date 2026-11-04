@@ -19,7 +19,7 @@ const log = require("../logger");
  *     rows.filter((r) => r.TREX1__Program__c === programTrId)
  *
  * Publishing one file per record is what made that need 119 requests instead
- * of one. The whole catalog is ~49 KB gzipped across four files (measured 2026-09-30).
+ * of one. The whole catalog is ~49 KB gzipped across four files.
  *
  * Parsley reads the same file server-side, because each row's Salesforce
  * fields sit at its root (see buildSnapshot):

@@ -23,7 +23,7 @@
  * gives the code a real `this`: the test page's item, so the Part 2 rows that
  * read `this.integration_test` run as written. Parsley does not evaluate
  * an include inside a false if, so a crashing draft cannot break the normal
- * page (verified 2026-10-01).
+ * page.
  *
  * Safety: binds to 127.0.0.1 only; refuses any Origin but the instance's own
  * domains, so another website cannot drive it; requires a JSON body (which

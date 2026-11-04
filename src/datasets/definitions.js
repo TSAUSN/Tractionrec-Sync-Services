@@ -16,7 +16,7 @@
  * `last_modified_date`, `system_modstamp`, `sync_hash` and `synced_at` from
  * plan.js, so they are not listed below.
  *
- * Lifecycle (2026-10-29, Japheth): a record is never deleted. One that leaves
+ * Lifecycle: a record is never deleted. One that leaves
  * Traction Rec's published set, is removed, or loses its parent becomes
  * `active = 0` with a reason, and the site hides it.
  *   tier         the TIERS key (src/config.js) a record of this dataset is

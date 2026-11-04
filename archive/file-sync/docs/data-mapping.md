@@ -1,9 +1,8 @@
 # Data mapping
 
 > Which Traction Rec object becomes which Zesty model, what lands in a
-> snapshot, and what the front end does with it. The authoritative field
-> reference is `KROC-draft/tractionrec-sandbox-content-model.md`; this document
-> only covers what the sync touches.
+> snapshot, and what the front end does with it. This document only
+> covers what the sync touches.
 
 ---
 
@@ -21,7 +20,7 @@ is what carries the publishing gate and the registration deep link, and a
 Course Option can appear under more than one Course Session. Syncing Course
 Option directly would lose both.
 
-This also settles an open point from the integration spec, which had
+This also settles an earlier open point, which had
 `[classes]` carrying **two** Traction Rec ids (Course Session + Course Option)
 because the deep link needs both. It does not need two: the junction row has
 its own Id, and `Deep_Link_URL__c` is a formula *on the junction* that already
@@ -43,7 +42,7 @@ of writing, which varies with the season.
 
 ## The `tractionrec_id` field
 
-Verified on the live instance (`8-80c0bba6b8-lhkcc7`) 2026-09-25:
+Verified on the live instance (`8-80c0bba6b8-lhkcc7`):
 
 | Model | ZUID | `tractionrec_id` |
 | :--- | :--- | :--- |
@@ -161,7 +160,7 @@ count and an unchanged record produces no write. A Salesforce field that
 collides with an added key or with `meta` makes the sync throw rather than
 overwrite.
 
-**Why the root and not a `data` envelope** (changed 2026-09-30): Parsley's
+**Why the root and not a `data` envelope**: Parsley's
 `api.json.get()` can only read a row's top-level scalars. A dotted read like
 `{{r.data.Name}}` crashes the page. With the envelope, Parsley could loop the
 files and read nothing. Nested values are harmless while nothing reads them,
@@ -202,7 +201,7 @@ attached as an **array**, not a single number:
   863 of 933 junction pairs disagree between the two levels.
 - The amount is `TREX1__Total_Billing_Schedule_Amount__c`. For class price
   levels `TREX1__Initial_Fee_Amount__c` really is null throughout — 0 of 50 on
-  the publishable set, re-checked 2026-09-28. **That does not generalise:** on
+  the publishable set, re-checked. **That does not generalise:** on
   Day Pass products the price lives *entirely* in `Initial_Fee_Amount__c`
   ($15 adult / $13 teen / $11 youth) with `Total_Billing_Schedule_Amount__c` at
   $0, and membership products carry a $20 joining fee there. Any tier beyond
@@ -216,7 +215,7 @@ attached as an **array**, not a single number:
   to show and let the registration deep link resolve entitlement after the
   hand-off.
 
-### Memberships (files only, 2026-10-08)
+### Memberships (files only)
 
 `membership_categories` (`TREX1__Membership_Category__c`) and
 `membership_types` (`TREX1__Membership_Type__c`, parent lookup

@@ -120,7 +120,7 @@ function pricesFor(tier, record, extras) {
  * earlier `{ meta, data }` envelope put every field one level down, so Parsley
  * could loop the file and read nothing out of it. Nested values are harmless
  * as long as nothing reads them, which is why `meta` can stay nested.
- * Verified on fixtures 2026-09-30 — see docs/relationships-without-zesty-fields.md.
+ * Verified on fixtures — see docs/relationships-without-zesty-fields.md.
  *
  * `meta.hash` covers everything except `meta`. It deliberately excludes
  * `syncedAt`, so a run that finds nothing changed writes nothing — which is
@@ -192,7 +192,7 @@ function slugify(text) {
  * Traction Rec record next changes.
  *
  * Root-level items answer on `/<pathPart>/`: the catalog models are not
- * nested, verified 2026-09-28 (`/senior-activities-2/`, `/hip-hop-step-lvl-2/`).
+ * nested, verified (`/senior-activities-2/`, `/hip-hop-step-lvl-2/`).
  */
 function linkItem(snapshot, { zuid, path }) {
   snapshot.meta.zestyItemZuid = zuid || null;

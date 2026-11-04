@@ -9,7 +9,7 @@
 > full server-side rendering, and only *listings* move to a different
 > mechanism.
 >
-> Status: 2026-10-02. Implemented: tier files (§2.0), root-level snapshot
+> Status: implemented: tier files (§2.0), root-level snapshot
 > fields (§2.0a) and parent → children files (§2.0c). The sync still writes the relational fields on create — see
 > [sync-flow.md](sync-flow.md).
 
@@ -49,9 +49,9 @@ page and for knowing the traps — but the relationship problem itself dissolves
 once the data is published per tier rather than per record.
 
 Two separate mechanisms, with different limits. Both tested against the live
-instance on 2026-09-30, because the official docs are unreliable here —
-AGENTS.md already records one documented JSON pattern
-(`api.json.get({field})`) that does not work on this instance.
+instance, because the official docs are unreliable here:
+one documented JSON pattern
+(`api.json.get({field})`) does not work on this instance.
 
 ### 2.0 The short answer: `tractionrec_id` + the Traction Rec data is enough
 
@@ -125,8 +125,7 @@ keep. They are not needed now.
 
 ### 2.0a Can Parsley render the relationship from the saved data?
 
-**Yes, for three of the four tiers, since the file format changed on
-2026-09-30.** The snapshot used to wrap the record in an envelope; it now
+**Yes, for three of the four tiers, since the file format changed.** The snapshot used to wrap the record in an envelope; it now
 puts Salesforce's fields at the root of each row:
 
 ```
@@ -144,8 +143,8 @@ with `meta`/`prices`/the relation key fails loudly instead of overwriting.
 
 With the envelope, `api.json.get` fetched and iterated the files (all 118
 course rows) but reading `{{r.data.Name}}` **crashed the whole page**. This
-applied equally to per-item and tier files. Isolated on fixtures on
-2026-09-30, one probe per page render because a crash takes the page down:
+applied equally to per-item and tier files. Isolated on fixtures,
+one probe per page render because a crash takes the page down:
 
 | probe inside `each api.json.get(…) as r` | result |
 | :--- | :--- |
@@ -228,7 +227,7 @@ The earlier test, restored on `/test-page/` §6 against the real per-item files:
   need from `c` before opening the inner loop. `this.*` does survive.
 - **It costs one sequential fetch per row.** Filtering all 119 courses to
   Basketball this way returns the correct 8 but took **71 s** to render on
-  stage (2026-10-01). The single `courses.json` fetch takes about 1 s. Use the
+  stage. The single `courses.json` fetch takes about 1 s. Use the
   per-row pattern only for a few rows already chosen in Zesty (a curated
   "featured" field), never for "every child of X".
 
@@ -260,7 +259,7 @@ need the array expressed as scalars. That is not yet designed.
 
 ---
 
-### 2.0c Parent → children files (implemented 2026-10-02)
+### 2.0c Parent → children files
 
 The sync also writes, for every parent, a file holding **only its own
 children**: `src/sync/children-files.js`, run after all tiers.
@@ -285,7 +284,7 @@ copied in full.
 {{end-each}}
 ```
 
-**Naming (2026-10-02): plural, REST-style.** Collections are plural and a
+**Naming: plural, REST-style.** Collections are plural and a
 child collection sits under its parent: `programs.json`, `programs/<id>.json`,
 `programs/<id>/courses.json`. Salesforce's own object names are singular
 (`TREX1__Course__c`), but these paths are not Traction Rec data. They are the
@@ -300,7 +299,7 @@ Zesty serves both and Parsley reads both.
 the tier file it could not, because a program's categories are an array. The
 sync resolves the membership while it builds the file. Course → classes is read
 in JavaScript, since class rows keep Salesforce's nested `__r` objects
-(decided 2026-10-02: no flattening).
+(decided: no flattening).
 
 **The rules**, each closing a way for a file to go wrong:
 
@@ -320,7 +319,7 @@ nothing at all.
 **Many-to-many.** A program tagged into two categories is copied in full into
 both files. The copies are identical because Traction Rec's link object
 (`TREX1__Program_Category_Tag__c`) carries no data of its own, only the two
-lookups and `TREX1__Legacy_Id__c` (checked 2026-10-02). If it ever gains a
+lookups and `TREX1__Legacy_Id__c`. If it ever gains a
 per-link field such as display order, that field cannot live on the program
 row and this design has to change. No program is in more than one category in
 the whole org today (20 tag rows for 20 programs), so the unit tests cover it
@@ -434,8 +433,8 @@ that looks like working code. **Filter with an inner `{{if}}`.**
 
 ### 2.3 `api.json.get()` — Parsley makes an HTTP call
 
-**This overturns a premise recorded across the project.** The integration spec
-and `AGENTS.md` both state that Parsley has no outbound HTTP. It does.
+**This overturns a premise recorded across the project**: that Parsley has no
+outbound HTTP. It does.
 
 ```
 {{each api.json.get(https://kroc.zesty.dev/tractionrec/_index/programs.json) as p}}
@@ -470,7 +469,7 @@ slow external service, would be fine.
 
 ### 2.3b Proven end to end — the index render matches the field render
 
-Built from the live synced catalog on 2026-09-30 and rendered on
+Built from the live synced catalog and rendered on
 `/test-page/`: a simulated Program detail page listing its Courses, with the
 `courses.programs` relational field read **nowhere**.
 
@@ -836,14 +835,14 @@ constraint that no longer applies:
 | gone | why it existed | superseded by |
 | :--- | :--- | :--- |
 | `_index/<tier>.json` | a lookup so a listing need not fetch 119 files | `/tractionrec/<tier>.json`, which carries the whole record |
-| `_children/<tier>/<parentTrId>.json` | one fetch per parent, and many-to-many | **reinstated 2026-10-02** as `<parentTier>/<parentId>/<childTier>.json` (§2.0c), now generated by the sync, written for every parent and rebuilt from all rows each run |
+| `_children/<tier>/<parentTrId>.json` | one fetch per parent, and many-to-many | **reinstated** as `<parentTier>/<parentId>/<childTier>.json` (§2.0c), now generated by the sync, written for every parent and rebuilt from all rows each run |
 | `_flat/course/<trId>.json` | scalar-only rows, the only shape `api.json.get` can read | nothing; Parsley is not the consumer |
 | `_probe/*`, `tr-include-test.json` | syntax probes | the findings, recorded above |
 
 The instance now holds exactly what the sync writes: one snapshot per record,
 one file per tier, one children file per parent, and `_sync-state.json`. The
 last hand-made files (`class.flat.json`, `_probe/flat-array.json`) were removed
-in the 2026-10-02 reset.
+in the reset.
 
 ## 3. What breaks if the relational fields go away
 
@@ -1045,7 +1044,7 @@ Step 4 is where the CMS stops lying to editors, which is the actual goal.
   pattern answers it in ten minutes.
 - **Can a `json()` loop reach an index item on a different model** —
   `{{each {tractionrec_index.programs}.json() as p}}` as written in §4.1 —
-  or does it need the dataset-loop form AGENTS.md documents for multi-item
+  or does it need the dataset-loop form used for multi-item
   models? Tested only as `{this.field}` on the page's own item.
 - **Is an included view counted against any render budget?** A page inlining
   one snapshot is fine. A listing page inlining 65 would matter — but it cannot

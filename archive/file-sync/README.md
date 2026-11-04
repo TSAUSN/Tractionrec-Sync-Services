@@ -1,6 +1,6 @@
 # Archived: the file sync
 
-*Archived 29 October 2026.* This is the first version of the sync, kept for
+*Archived.* This is the first version of the sync, kept for
 reference. **It is not run, deployed, tested or imported by anything in the
 repo.** The live sync is the dataset sync in `src/` (see the repo's
 `AGENTS.md` and `docs/dataset-sync.md`).
@@ -19,8 +19,8 @@ copies of some Traction Rec values into page fields.
 
 ## Why it was archived
 
-On 2026-10-19/20 the site moved to the `tr_*` Zesty datasets (one item per
-record, relations between them). On 2026-10-29 Japheth decided to keep the
+The site moved to the `tr_*` Zesty datasets (one item per
+record, relations between them). It was then decided to keep the
 dataset architecture and retire this sync. The dataset sync took over both
 jobs:
 - the data, in datasets instead of files;

@@ -7,7 +7,7 @@ const { parsleySafeJson, snapshotPath, indexViewRows } = require("../src/zesty/v
 
 test("snapshots are filed under /tractionrec/<tier>/<id>.json, with the leading slash", () => {
   // Without the leading slash the API accepts the view, reports it live, and
-  // then 404s on every request. Verified on the instance 2026-09-25.
+  // then 404s on every request. Verified on the instance.
   assert.equal(
     snapshotPath("program_categories", "a0X1U000001abcUAA"),
     "/tractionrec/program_categories/a0X1U000001abcUAA.json"

@@ -1,7 +1,5 @@
 # How Traction Rec data reaches the KROC website
 
-*As of 5 October 2026*
-
 ## In short
 
 The website's class catalog (categories, programs, courses and classes) now

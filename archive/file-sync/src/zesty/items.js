@@ -133,7 +133,7 @@ async function createItem(zesty, {
       metaTitle: title,
       metaLinkText: title,
       metaDescription: ""
-      // `web.parentZUID` is deliberately NOT set. Verified 2026-09-28: the
+      // `web.parentZUID` is deliberately NOT set. Verified: the
       // catalog models are not nested (categories/programs/courses sit at
       // root; `classes` points at the stale `program_categories` pageset) and
       // every hand-authored item lives flat at root — /basketball/,

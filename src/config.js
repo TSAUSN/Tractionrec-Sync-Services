@@ -125,7 +125,7 @@ const TIERS = {
      * ("Outside Course Option Registration Timeframe", "Course Session Option
      * Not Available", …). It is time-based — a class leaves the gate when its
      * registration window closes, and enters it when one opens, without the
-     * record being modified (verified 2026-10-29). So the gate is re-read in
+     * record being modified. So the gate is re-read in
      * full on every run, never incrementally.
      */
     where: "TREX1__Course_Online_Availability__c = null",
@@ -226,7 +226,7 @@ const TIERS = {
     parentVia: { lookup: "TREX1__Category__c" },
     /**
      * Membership Type -> Product -> Price Level -> Planned Billing Schedule.
-     * Where the real amount sits depends on the kind (verified 2026-10-08):
+     * Where the real amount sits depends on the kind:
      * Autopay = the Monthly schedule's amount; Annual / 1 Month = the One Time
      * schedule's amount; Day Pass = the level's initial fee (no schedule).
      */
