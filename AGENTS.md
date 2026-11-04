@@ -45,7 +45,9 @@ src/zesty/              SDK connection, model + item indexes
 src/parsley-runner.js   /test-page/'s live Parsley runner (dev tool, unrelated to the sync)
 zesty-models/*.json     the nine dataset specs, numbered in creation order (read at runtime)
 .gcloudignore           what a deploy uploads: src/, zesty-models/, package files
-deploy/                 secrets.sh (Secret Manager from .env), alerts.sh (email alert)
+deploy/                 deploy.sh (the whole deploy, rerunnable, step by step),
+                        config.sh (names + settings), secrets.sh (Secret Manager
+                        from .env), alerts.sh (email alert)
 test/                   unit tests (npm test) + scenarios/ (live, see §6)
 archive/file-sync/      the archived file sync (README there)
 ```
@@ -161,16 +163,31 @@ npm start                              # the function locally (functions-framewo
   showed on them after ~12 s, and the sync's restore showed at once.
   Publishing a `tr_*` item clears the cached pages that print it.
 
-To redeploy after a code change, run from the repo root (same flags):
+**Deploying: `bash deploy/deploy.sh`.** Every step checks what already
+exists and only creates or updates what's missing or different, so the whole
+script is safe to rerun (rerun in full: same function and job, a
+dry run and a Scheduler run both 200 with 0 errors). Names and settings
+(project, region, schedule, alert email, the sandbox login URL) are in
+`deploy/config.sh`; each can be overridden from the environment.
+
+| Step | Does |
+| --- | --- |
+| `apis` | switches on the nine Google Cloud products the sync uses (Functions, Run, Build, Artifact Registry, Secret Manager, Scheduler, Logging, Monitoring, IAM) |
+| `accounts` | the two service accounts: `kroc-sync-runtime` (the function runs as it) and `kroc-sync-scheduler` (the Scheduler calls as it) |
+| `secrets` | `deploy/secrets.sh` |
+| `function` | deploys this folder with the flags below; warns if the tree has uncommitted changes, since they're uploaded too |
+| `invoker` | `run.invoker` on the function for `kroc-sync-scheduler` only |
+| `schedule` | creates or updates the Scheduler job; the audience comes from the function's URL and `X-Sync-Key` from Secret Manager. The key is never printed, but gcloud takes it as an argument, so run this on a trusted machine |
+| `alerts` | `deploy/alerts.sh` |
+| `check` | a dry run over HTTP as the signed-in gcloud user (`?dry=1`; needs `run.invoker`, which Owner has); fails unless `errorCount` is 0 |
 
 ```
-gcloud functions deploy kroc-tractionrec-sync \
-  --gen2 --runtime=nodejs22 --region=us-west1 --project=kroc-services \
-  --service-account=kroc-sync-runtime@kroc-services.iam.gserviceaccount.com \
-  --source=. --entry-point=sync --trigger-http --no-allow-unauthenticated \
-  --timeout=540s --memory=512Mi --max-instances=1 --concurrency=1 \
-  --set-env-vars=TR_LOGIN_URL=https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com,TR_API_VERSION=v62.0,ZESTY_INSTANCE_ZUID=8-80c0bba6b8-lhkcc7,DRY_RUN=0 \
-  --set-secrets=TR_CLIENT_ID=tr-client-id:latest,TR_CLIENT_SECRET=tr-client-secret:latest,ZESTY_INSTANCE_TOKEN=zesty-instance-token:latest,SYNC_TRIGGER_KEY=sync-trigger-key:latest
+bash deploy/deploy.sh                    # everything, in order
+bash deploy/deploy.sh function check     # after a code change
+bash deploy/deploy.sh schedule           # after changing SCHEDULE / TIME_ZONE in config.sh
+bash deploy/secrets.sh --rotate && bash deploy/deploy.sh function schedule   # new values in .env
+A function deploy takes about 1.5 minutes. The flags it uses, and why:
+
 ```
 
 - **`DRY_RUN=0` is required.** Its default is 1, which plans and writes

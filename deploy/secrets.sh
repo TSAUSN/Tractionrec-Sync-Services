@@ -12,8 +12,8 @@
 #   gcloud secrets versions access latest --secret=sync-trigger-key
 set -euo pipefail
 
-PROJECT="${PROJECT:-kroc-services}"
-RUNTIME_SA="kroc-sync-runtime@${PROJECT}.iam.gserviceaccount.com"
+# shellcheck source=deploy/config.sh
+source "$(dirname "$0")/config.sh"
 ROTATE="${1:-}"
 cd "$(dirname "$0")/.."
 [ -f .env ] || { echo ".env not found in $(pwd)"; exit 1; }

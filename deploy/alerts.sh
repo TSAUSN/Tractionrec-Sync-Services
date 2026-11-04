@@ -7,15 +7,17 @@
 #   - the Cloud Scheduler call fails   (function unreachable, 403, timeout)
 # At most one email per 5 minutes; an incident closes itself after 7 days.
 #
+#   bash deploy/alerts.sh                       (ALERT_EMAIL from deploy/config.sh)
 #   ALERT_EMAIL=someone@example.com bash deploy/alerts.sh
 set -euo pipefail
 
-PROJECT="${PROJECT:-kroc-services}"
-EMAIL="${ALERT_EMAIL:?set ALERT_EMAIL}"
-NAME="kroc-tractionrec-sync: run errors"
+# shellcheck source=deploy/config.sh
+source "$(dirname "$0")/config.sh"
+EMAIL="$ALERT_EMAIL"
+NAME="${FUNCTION}: run errors"
 
 channel="$(gcloud beta monitoring channels list --project="$PROJECT" \
-  --filter="type=email AND labels.email_address=$EMAIL" --format="value(name)" | head -1)"
+  --filter="type=\"email\" AND labels.email_address=\"$EMAIL\"" --format="value(name)" | head -1)"
 if [ -z "$channel" ]; then
   channel="$(gcloud beta monitoring channels create --project="$PROJECT" \
     --display-name="KROC sync alerts ($EMAIL)" --type=email \
@@ -39,7 +41,7 @@ cat > "$policy" <<JSON
   "conditions": [{
     "displayName": "Sync run reported errors, failed, or was not reached",
     "conditionMatchedLog": {
-      "filter": "(resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"kroc-tractionrec-sync\" AND ((jsonPayload.message=\"sync.done\" AND jsonPayload.errorCount>0) OR jsonPayload.message=\"sync.failed\" OR severity>=ERROR)) OR (resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"kroc-tractionrec-sync-daily\" AND severity>=ERROR)"
+      "filter": "(resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$FUNCTION\" AND ((jsonPayload.message=\"sync.done\" AND jsonPayload.errorCount>0) OR jsonPayload.message=\"sync.failed\" OR severity>=ERROR)) OR (resource.type=\"cloud_scheduler_job\" AND resource.labels.job_id=\"$JOB\" AND severity>=ERROR)"
     }
   }],
   "alertStrategy": {
@@ -49,7 +51,7 @@ cat > "$policy" <<JSON
   "notificationChannels": ["$channel"],
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "The Traction Rec -> Zesty sync (function kroc-tractionrec-sync, project $PROJECT) reported a problem.\n\nOpen the matching log entry from this incident. A finished run's report is in the sync.done line (errorCount) and the per-dataset lines before it; sync.failed carries the error message. Rerun with: gcloud scheduler jobs run kroc-tractionrec-sync-daily --location=us-west1. Docs: kroc-tractionrec-sync/AGENTS.md §5."
+    "content": "The Traction Rec -> Zesty sync (function $FUNCTION, project $PROJECT) reported a problem.\n\nOpen the matching log entry from this incident. A finished run's report is in the sync.done line (errorCount) and the per-dataset lines before it; sync.failed carries the error message. Rerun with: gcloud scheduler jobs run $JOB --location=$REGION. Docs: kroc-tractionrec-sync/AGENTS.md §5."
   }
 }
 JSON
