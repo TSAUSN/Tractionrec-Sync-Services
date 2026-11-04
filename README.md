@@ -40,11 +40,18 @@ npm test                           # unit tests
 npm run sync -- --live --summary   # write + publish
 ```
 
+## Deploy
+
+`bash deploy/deploy.sh` deploys the function, its daily schedule and its error
+email to Google Cloud. It is safe to rerun. See
+[deploy/README.md](deploy/README.md).
+
 ## Documentation
 
 | | |
 | :--- | :--- |
 | [AGENTS.md](AGENTS.md) | **start here**: what a run does, the rules, commands, tests, verified facts and open items, in one page |
+| [deploy/README.md](deploy/README.md) | how to deploy, what gets created in Google Cloud, and the common tasks (redeploy, run now, rotate secrets, pause) |
 | [docs/dataset-sync.md](docs/dataset-sync.md) | reviewer report: the sync, how Traction Rec maps onto the `tr_*` datasets, how the site uses them, verification and open items |
 | [docs/dataset-storage.md](docs/dataset-storage.md) | the design and the instance measurements behind it, the model tree, the browser-fetch option for the class finder, the field appendix |
 | [archive/file-sync/](archive/file-sync/README.md) | the first version, which wrote JSON files under `/tractionrec/`; archived, not used |

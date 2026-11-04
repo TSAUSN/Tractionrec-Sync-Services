@@ -161,7 +161,7 @@ npm start                              # the function locally (functions-framewo
   showed on them after ~12 s, and the sync's restore showed at once.
   Publishing a `tr_*` item clears the cached pages that print it.
 
-**Deploying: `bash deploy/deploy.sh`.** Every step checks what already
+**Deploying: `bash deploy/deploy.sh`** (step-by-step guide for people: [deploy/README.md](deploy/README.md)). Every step checks what already
 exists and only creates or updates what's missing or different, so the whole
 script is safe to rerun (rerun in full: same function and job, a
 dry run and a Scheduler run both 200 with 0 errors). Names and settings
