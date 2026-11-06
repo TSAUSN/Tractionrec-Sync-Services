@@ -18,10 +18,14 @@
  *      e. a renamed record's page follows: title + SEO title, never the URL
  *
  * Nothing is deleted. DRY_RUN (default on) plans and writes nothing.
+ * `overrides.config` is a center's loaded config, or `overrides.center` names
+ * one to load (src/centers.js); without either the settings come from the
+ * environment (.env).
  * `overrides.source` replaces Traction Rec (the scenario tests).
  */
 
 const { load } = require("../config");
+const { loadCenter } = require("../centers");
 const { TractionRecClient } = require("../tractionrec/client");
 const { connect } = require("../zesty/client");
 const { indexModels, indexItems } = require("../zesty/items");
@@ -42,7 +46,9 @@ const PAGE_MODELS = DATASETS.filter((d) => d.page).map((d) => d.page.model);
 const zuidMap = (byTrId) => new Map([...byTrId].map(([trId, item]) => [trId, item.meta.ZUID]));
 
 async function run(overrides = {}) {
-  const cfg = { ...load(), ...overrides };
+  const { config, ...rest } = overrides;
+  const base = config || (overrides.center ? await loadCenter(overrides.center) : load());
+  const cfg = { ...base, ...rest };
   const selected = cfg.datasets && cfg.datasets.length ? cfg.datasets : DATASETS.map((d) => d.key);
   for (const key of selected) {
     if (!DATASETS.some((d) => d.key === key)) {
@@ -50,7 +56,7 @@ async function run(overrides = {}) {
     }
   }
   const startedAt = new Date();
-  log.info("sync.start", { datasets: selected, dryRun: cfg.dryRun });
+  log.info("sync.start", { datasets: selected, dryRun: cfg.dryRun, zesty: cfg.zesty.instanceZuid });
 
   // 1. definitions <-> specs <-> instance
   const specs = loadSpecs();
@@ -96,7 +102,12 @@ async function run(overrides = {}) {
     new Map([...pageItems].map(([model, byTrId]) => [model, zuidMap(byTrId)]));
 
   // 3. datasets, in dependency order
-  const report = { startedAt: startedAt.toISOString(), dryRun: cfg.dryRun, datasets: {} };
+  const report = {
+    center: cfg.center || null,
+    startedAt: startedAt.toISOString(),
+    dryRun: cfg.dryRun,
+    datasets: {}
+  };
   for (const ds of DATASETS) {
     if (!selected.includes(ds.key)) {
       continue;

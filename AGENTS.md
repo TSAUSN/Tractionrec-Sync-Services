@@ -4,10 +4,13 @@ Read this before changing anything here. It records how the service works
 **now** and the decisions behind it. `docs/` has the design, the
 measurements and the reviewer report; this file is the current state.
 
-**What this is:** an HTTP Google Cloud Function (Node 22). Each call copies
-Traction Rec's published catalog and memberships into the KROC Zesty instance
-(`8-80c0bba6b8-lhkcc7`, served at `kroc.zesty.dev`, stage
-`6wz46m14-dev.webengine.zesty.io`):
+**What this is:** an HTTP Google Cloud Function (Node 22) serving **several
+Kroc centers**, each with its own Traction Rec org and its own Zesty instance
+(`.env.<id>` locally, Secret Manager `center-<id>` deployed; rule 8). Each call syncs **one center**: it copies that
+center's published Traction Rec catalog and memberships into its Zesty
+instance. Today that is Phoenix (`8-80c0bba6b8-lhkcc7`, served at
+`kroc.zesty.dev`, stage `6wz46m14-dev.webengine.zesty.io`), plus `phoenix-2`, a
+test copy pointing at the same org and instance:
 
 - **Nine `tr_*` Zesty datasets:** one item per Traction Rec record, with
   relations between them.
@@ -27,9 +30,11 @@ in `archive/file-sync/`. Nothing in `src/` or `test/` uses it.
 ## 1. Layout
 
 ```
-src/index.js            HTTP entry (functions-framework target "sync"); ?datasets=&dry=1
-src/cli.js              local runner: npm run sync[:dry] [-- --live --datasets=… --summary]
-src/config.js           Traction Rec tiers: object, fields, publishing gate, parent, price join
+src/index.js            HTTP entry (functions-framework target "sync"); ?center= (required) &datasets= &dry=1
+src/cli.js              local runner: npm run sync[:dry] [-- --center=… --live --datasets=… --summary]
+src/centers.js          a center's settings (.env.<id>, else Secret Manager center-<id>) -> a run config
+src/config.js           Traction Rec tiers: object, fields, publishing gate, parent, price join;
+                        load() = the single-center config from the environment (.env)
 src/datasets/
   definitions.js        dataset -> Traction Rec source, field getters, relations, lifecycle, page
   schema.js             definitions <-> zesty-models/*.json <-> live models (stops the run on a mismatch)
@@ -44,7 +49,8 @@ src/tractionrec/        OAuth client_credentials client, SOQL, fetchTier (gates,
 src/zesty/              SDK connection, model + item indexes
 src/parsley-runner.js   /test-page/'s live Parsley runner (dev tool, unrelated to the sync)
 zesty-models/*.json     the nine dataset specs, numbered in creation order (read at runtime)
-.gcloudignore           what a deploy uploads: src/, zesty-models/, package files
+.env.center.example     the template for a center file, .env.<id> (gitignored)
+.gcloudignore           what a deploy leaves out: it uploads src/, zesty-models/, package files
 deploy/                 deploy.sh (the whole deploy, rerunnable, step by step),
                         config.sh (names + settings), secrets.sh (Secret Manager
                         from .env), alerts.sh (email alert)
@@ -125,14 +131,43 @@ that added the lifecycle fields to every item took 297 s. The function limit is
    the definitions and specs agree.
 7. **Dry-run first.** `.env` has `DRY_RUN=1`, so `npm run sync` only plans.
    Read the plan, then `npm run sync -- --live`.
+8. **One run = one center.** Everything about a center is one set of
+   settings (`.env.center.example`): its name, Traction Rec org URL, API
+   version and client id + secret, Zesty instance ZUID and token, and its
+   schedule (cron + time zone).
+   - **locally:** `.env.<id>` in the repo root (gitignored). A `.env.<id>`
+     is a center only when it sets `CENTER_NAME`, so `.env.example` and
+     backups are ignored;
+   - **deployed:** Secret Manager `center-<id>`, the same settings as JSON,
+     labelled `kroc-sync=center`, read when the run starts. **A center exists
+     when its secret does:** adding or changing one needs no redeploy;
+     `deploy/secrets.sh` uploads a file only when it differs from the secret.
+   - The settings that aren't secret are not in git. Secret Manager keeps
+     every version, which is the history.
+
+   The HTTP call must name its center (`?center=<id>`): none → 400, unknown
+   (no such secret) → 404. Every log line of a run carries `center`, and so does the report.
+   Locally, `--center=<id>` selects one; without it the CLI uses `.env` alone
+   (the scenario and live-cache tests still do).
+   - **Each center needs its own Zesty instance built from the template** (the
+     nine `tr_*` models from `zesty-models/`, the four page models, optional
+     editorial fields) and a read-only Traction Rec integration user.
+   - **Two runs of the same center must never overlap** (they could create the
+     same item twice). Runs for different centers write to different instances
+     and can't collide; the function still takes one request at a time, and
+     the time zones spread the jobs out.
+   - `phoenix-2` is a **test copy** of Phoenix (same org, same instance, so its
+     runs write nothing new). Remove it once a real second center exists:
+     delete its `.env.phoenix-2`, its job and its secret.
 
 ## 4. Commands
 
 ```
-npm run sync:dry -- --summary          # plan only, counts per dataset
-npm run sync -- --live --summary       # write + publish
+npm run sync:dry -- --summary                      # plan only, counts per dataset (.env)
+npm run sync:dry -- --center=phoenix --summary     # the same for one center (.env.phoenix)
+npm run sync -- --live --summary                   # write + publish
 npm run sync -- --live --datasets=tr_classes,tr_price_levels
-npm test                               # unit tests (42)
+npm test                                           # unit tests (51)
 npm run test:scenarios                 # the real sync vs the real instance, simulated Traction Rec (§5)
 npm run test:live-cache                # does a published change reach the LIVE pages? (§5)
 npm run runner                         # /test-page/'s Parsley runner (127.0.0.1:8787)
@@ -141,21 +176,24 @@ npm start                              # the function locally (functions-framewo
 
 ## 5. Deploy
 
-**Deployed and running daily.**
+**Deployed and running daily, one job per center.**
 
 | | |
 | --- | --- |
 | Project | `kroc-services` (number 1029593951118), region `us-west1` |
 | Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
-| Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the four secrets below |
-| Secrets (Secret Manager) | `tr-client-id`, `tr-client-secret`, `zesty-instance-token`, `sync-trigger-key`; created from `.env` by `deploy/secrets.sh` (`--rotate` to replace, e.g. a new Zesty token) |
+| Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the secrets below |
+| Secrets (Secret Manager) | `sync-trigger-key` (bound at deploy as `SYNC_TRIGGER_KEY`) and one `center-<id>` per center (read per run); created by `deploy/secrets.sh` from `.env` and `.env.<id>` (a center's new version only when its file changed; `--rotate-key` for a new trigger key). The older `tr-client-id`, `tr-client-secret` and `zesty-instance-token` are no longer read |
 | Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email to `ALERT_EMAIL` (`deploy/config.sh`), created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested with a deliberately invalid run (HTTP 500, `sync.failed`) |
-| Schedule | Cloud Scheduler job `kroc-tractionrec-sync-daily` (us-west1): **00:00 America/Phoenix daily**, POST, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
+| Schedule | one Cloud Scheduler job per center, `kroc-tractionrec-sync-<id>` (us-west1), at the `SCHEDULE` and `TIME_ZONE` in its center settings: `phoenix` **00:00 America/Phoenix**, `phoenix-2` 00:30 America/Los_Angeles. POST `/?center=<id>`, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
 
 **Verified on deploy:**
 - **Auth:** no identity → 403; identity without the key → 403; both → 200.
 - **A dry run** over HTTP: 6.5 s, 0 errors.
 - **A forced Scheduler run:** POST 200, a live sync, 0 errors, 7 s.
+- **Two centers:** each job's forced run returned 200 with 0 errors, logged
+  under its own `center`. Fired at the same moment, the second request
+  waited for the first and both returned 200; no retry was needed.
 - **Live cache:** `npm run test:live-cache` after the site was published.
   Both live pages were cached by Varnish (`HIT`), yet a published row change
   showed on them after ~12 s, and the sync's restore showed at once.
@@ -163,27 +201,31 @@ npm start                              # the function locally (functions-framewo
 
 **Deploying: `bash deploy/deploy.sh`** (step-by-step guide for people: [deploy/README.md](deploy/README.md)). Every step checks what already
 exists and only creates or updates what's missing or different, so the whole
-script is safe to rerun (rerun in full: same function and job, a
-dry run and a Scheduler run both 200 with 0 errors). Names and settings
-(project, region, schedule, alert email, the sandbox login URL) are in
-`deploy/config.sh`; each can be overridden from the environment.
+script is safe to rerun. Names and settings (project, region, job prefix,
+alert email) are in `deploy/config.sh`, each can be overridden from the
+environment; everything per center is in its center settings (rule 8). The
+`schedule` and `check` steps list the centers from Secret Manager, so they
+work from any machine signed in to the project.
 
 | Step | Does |
 | --- | --- |
 | `apis` | switches on the nine Google Cloud products the sync uses (Functions, Run, Build, Artifact Registry, Secret Manager, Scheduler, Logging, Monitoring, IAM) |
 | `accounts` | the two service accounts: `kroc-sync-runtime` (the function runs as it) and `kroc-sync-scheduler` (the Scheduler calls as it) |
-| `secrets` | `deploy/secrets.sh` |
+| `secrets` | `deploy/secrets.sh`: the trigger key, and `center-<id>` for every center (from `.env.<id>`; an existing one is kept when that file isn't here) |
 | `function` | deploys this folder with the flags below; warns if the tree has uncommitted changes, since they're uploaded too |
 | `invoker` | `run.invoker` on the function for `kroc-sync-scheduler` only |
-| `schedule` | creates or updates the Scheduler job; the audience comes from the function's URL and `X-Sync-Key` from Secret Manager. The key is never printed, but gcloud takes it as an argument, so run this on a trusted machine |
+| `schedule` | creates or updates one Scheduler job per center; the audience comes from the function's URL and `X-Sync-Key` from Secret Manager. Reports, never deletes, a job that calls the function but matches no center. The key is never printed, but gcloud takes it as an argument, so run this on a trusted machine |
 | `alerts` | `deploy/alerts.sh` |
-| `check` | a dry run over HTTP as the signed-in gcloud user (`?dry=1`; needs `run.invoker`, which Owner has); fails unless `errorCount` is 0 |
+| `check` | a dry run over HTTP for every center as the signed-in gcloud user (`?center=<id>&dry=1`; needs `run.invoker`, which Owner has); fails unless each returns its center and `errorCount` 0 |
 
 ```
 bash deploy/deploy.sh                    # everything, in order
 bash deploy/deploy.sh function check     # after a code change
-bash deploy/deploy.sh schedule           # after changing SCHEDULE / TIME_ZONE in config.sh
-bash deploy/secrets.sh --rotate && bash deploy/deploy.sh function schedule   # new values in .env
+bash deploy/deploy.sh schedule           # after changing a center's schedule
+bash deploy/deploy.sh secrets function schedule check   # a new center (deploy/README.md)
+bash deploy/secrets.sh <id>              # a new or changed .env.<id>; the next run uses it
+bash deploy/deploy.sh schedule check     # then: its job (new center, or a new time)
+bash deploy/secrets.sh --rotate-key && bash deploy/deploy.sh function schedule check   # new trigger key
 ```
 
 A function deploy takes about 1.5 minutes. The flags it uses, and why:
@@ -191,27 +233,34 @@ A function deploy takes about 1.5 minutes. The flags it uses, and why:
 - **`DRY_RUN=0` is required.** Its default is 1, which plans and writes
   nothing, so a deploy without it looks healthy but does nothing.
 - **`--max-instances=1 --concurrency=1`:** the code has no lock. Two
-  overlapping runs would each see a new record as missing and create it
-  twice (item and page). One instance, one request at a time, prevents that.
-  The caller should also not fire a new run while one is still going.
+  overlapping runs of one center would each see a new record as missing and
+  create it twice (item and page). One instance, one request at a time,
+  prevents that; a request arriving during a run waits for it. The caller
+  should also not fire a new run while one is still going.
 - **`--timeout=540s`** covers the slowest run seen: 297 s, the one-off that
   added the lifecycle fields to every item. A quiet run takes about 16–22 s.
 - **The caller** (the Scheduler job) needs `roles/run.invoker` on the
   function. It sends an OIDC identity token **and** `X-Sync-Key`. Alerting
   should key off the report's `errorCount`, not the HTTP status: a partial
-  failure still returns 200. Optional query: `?datasets=tr_classes,…&dry=1`.
-  To run it now: `gcloud scheduler jobs run kroc-tractionrec-sync-daily --location=us-west1`.
+  failure still returns 200. Required query: `?center=<id>`; optional
+  `&datasets=tr_classes,…&dry=1`. To run one center now:
+  `gcloud scheduler jobs run kroc-tractionrec-sync-<id> --location=us-west1`.
 - **Logs:** Cloud Logging, `resource.labels.service_name="kroc-tractionrec-sync"`.
   Each run logs `sync.start` and `sync.done` (`errorCount`, `durationMs`)
-  plus one line per dataset.
+  plus one line per dataset, every line with `center`; filter one with
+  `jsonPayload.center="phoenix"`.
 - **`.gcloudignore`** uploads only `src/`, `zesty-models/` and the package
-  files. Keep `zesty-models/`: the function reads the specs at runtime for
-  its schema check, and every run fails without them.
+  files. Keep `zesty-models/`: the function reads the specs at runtime for its
+  schema check, and every run fails without them. `.env` and `.env.<id>` are
+  never uploaded.
 - **The Zesty token** must be an instance access token, not a person's
   session token. The current one is a 49-character key, not a session JWT;
   confirm in the Manager that it has no expiry and only the rights it needs.
-- The `@google-cloud/secret-manager` dependency is unused: secrets arrive as
-  environment variables through `--set-secrets`.
+- **Centers** are read with `@google-cloud/secret-manager` at the start of each
+  run (`GCP_PROJECT` names the project). The runtime account is granted each
+  `center-<id>` one by one, so a missing secret reads as "permission denied",
+  which the code treats as an unknown center (404). Only the trigger key
+  arrives as an environment variable through `--set-secrets`.
 
 ## 6. Tests
 

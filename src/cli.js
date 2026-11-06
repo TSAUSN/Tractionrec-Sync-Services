@@ -4,6 +4,9 @@
  * Local runner for the sync. `npm run sync:dry` plans a run and writes
  * nothing; `npm run sync -- --live` writes.
  *
+ *   --center=phoenix                         one center: .env.<id>, else its
+ *                                            Secret Manager secret. Without it
+ *                                            the settings come from .env
  *   --datasets=tr_products,tr_price_levels   only these (relations to the
  *                                            others resolve from the instance)
  *   --live | --dry                           override DRY_RUN
@@ -25,10 +28,14 @@ if (fs.existsSync(envPath)) {
 }
 
 const { run } = require("./datasets/run");
+const log = require("./logger");
 
 const args = process.argv.slice(2);
 const overrides = {};
 for (const arg of args) {
+  if (arg.startsWith("--center=")) {
+    overrides.center = arg.slice("--center=".length);
+  }
   if (arg.startsWith("--datasets=")) {
     overrides.datasets = arg.slice("--datasets=".length).split(",").filter(Boolean);
   }
@@ -60,7 +67,8 @@ const brief = (report) => ({
   )
 });
 
-run(overrides)
+log
+  .withContext(overrides.center ? { center: overrides.center } : {}, () => run(overrides))
   .then((report) => {
     process.stdout.write(JSON.stringify(summary ? brief(report) : report, null, 2) + "\n");
     process.exit(report.errorCount > 0 ? 1 : 0);

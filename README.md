@@ -1,10 +1,12 @@
 # kroc-tractionrec-sync
 
 A one-way sync from **Traction Rec** (Salesforce) into the **KROC Zesty
-WebEngine** instance, as an HTTP Google Cloud Function. A separate service calls
-it; it has no schedule of its own.
+WebEngine** instances, as an HTTP Google Cloud Function. It serves several Kroc
+centers, each with its own Traction Rec org and Zesty instance
+(`.env.<id>` locally, Secret Manager when deployed). A separate service calls it, once per center; it has no
+schedule of its own.
 
-Each call:
+Each call (`?center=<id>`), for that center:
 
 1. copies Traction Rec's published catalog and memberships into **nine `tr_*`
    Zesty datasets**: one item per record, with relations between them;
@@ -38,13 +40,16 @@ cp .env.example .env               # fill in; .env is gitignored
 npm run sync:dry -- --summary      # plan, write nothing
 npm test                           # unit tests
 npm run sync -- --live --summary   # write + publish
+
+# one center: cp .env.center.example .env.<id>, fill in, then
+npm run sync:dry -- --center=phoenix --summary
 ```
 
 ## Deploy
 
-`bash deploy/deploy.sh` deploys the function, its daily schedule and its error
-email to Google Cloud. It is safe to rerun. See
-[deploy/README.md](deploy/README.md).
+`bash deploy/deploy.sh` deploys the function, one daily schedule per center
+and the error email to Google Cloud. It is safe to rerun. See
+[deploy/README.md](deploy/README.md), which also covers adding a center.
 
 ## Documentation
 

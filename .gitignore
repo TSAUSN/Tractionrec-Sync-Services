@@ -2,5 +2,6 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.center.example
 *.log
 .sync-state.json
