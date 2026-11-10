@@ -1,7 +1,7 @@
 # Names and settings shared by the deploy scripts (sourced, not run).
 # Each value can be overridden from the environment, e.g. PROJECT=other-project.
-# Per-center settings are not here: each center is .env.<id> locally and the
-# secret center-<id> in Secret Manager (.env.center.example).
+# The centers are not here: they are centers.yaml (settings) and three Secret
+# Manager secrets per center (passwords).
 
 PROJECT="${PROJECT:-kroc-services}"
 REGION="${REGION:-us-west1}"
@@ -9,25 +9,41 @@ REGION="${REGION:-us-west1}"
 FUNCTION="${FUNCTION:-kroc-tractionrec-sync}"
 RUNTIME_SA="kroc-sync-runtime@${PROJECT}.iam.gserviceaccount.com"
 SCHEDULER_SA="kroc-sync-scheduler@${PROJECT}.iam.gserviceaccount.com"
+# The account GitHub Actions deploys as (Workload Identity Federation).
+DEPLOYER_SA="kroc-sync-deployer@${PROJECT}.iam.gserviceaccount.com"
+
+# The repository and branch allowed to deploy, and the trust that lets it.
+GITHUB_REPO="${GITHUB_REPO:-TSAUSN/Tractionrec-Sync-Services}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+WIF_POOL="github"
+WIF_PROVIDER="github"
 
 # One Cloud Scheduler job per center: <JOB_PREFIX><center id>.
 JOB_PREFIX="${JOB_PREFIX:-${FUNCTION}-}"
 
-# Every center secret carries this label, which is how the scripts list them.
-CENTER_LABEL="kroc-sync=center"
+# Label on every center secret (center-<id>-…), for finding them in the Console.
+CENTER_SECRET_LABEL="kroc-sync=center-secret"
 
 ALERT_EMAIL="${ALERT_EMAIL:-japhethlouie@gmail.com}"
 
-# The deployed centers (their secrets), one id per line.
+# The centers in centers.yaml, one id per line (the repo root is the working dir).
 center_ids() {
-  gcloud secrets list --project="$PROJECT" --filter="labels.${CENTER_LABEL%%=*}=${CENTER_LABEL#*=}" \
-    --format="value(name.basename())" | sed -n 's/^center-//p' | sort
+  node -e 'for (const c of require("./src/centers").listCenters()) console.log(c.id)'
 }
 
-# One setting of a deployed center that is not secret: center_field <id> <KEY>
+# One setting of a center from centers.yaml: center_field <id> <dotted.path>
 center_field() {
-  case "$2" in CENTER_NAME|SCHEDULE|TIME_ZONE|TR_LOGIN_URL|ZESTY_INSTANCE_ZUID) ;;
-    *) echo "center_field: $2 is not a readable setting" >&2; return 1 ;; esac
-  gcloud secrets versions access latest --secret="center-$1" --project="$PROJECT" |
-    node -e 'let s=""; process.stdin.on("data", (d) => (s += d)).on("end", () => console.log(JSON.parse(s)[process.argv[1]] || ""))' "$2"
+  node -e '
+    const c = require("./src/centers").getCenter(process.argv[1]);
+    console.log(process.argv[2].split(".").reduce((o, k) => o[k], c));
+  ' "$1" "$2"
+}
+
+# The three secret names of a center, one per line.
+center_secret_names() {
+  node -e 'for (const n of require("./src/centers").secretNames(process.argv[1])) console.log(n)' "$1"
+}
+
+project_number() {
+  gcloud projects describe "$PROJECT" --format="value(projectNumber)"
 }

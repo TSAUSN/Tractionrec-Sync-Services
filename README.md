@@ -2,9 +2,10 @@
 
 A one-way sync from **Traction Rec** (Salesforce) into the **KROC Zesty
 WebEngine** instances, as an HTTP Google Cloud Function. It serves several Kroc
-centers, each with its own Traction Rec org and Zesty instance
-(`.env.<id>` locally, Secret Manager when deployed). A separate service calls it, once per center; it has no
-schedule of its own.
+centers, each with its own Traction Rec org and Zesty instance: their
+settings are in [centers.yaml](centers.yaml), their passwords in Secret
+Manager. A Cloud Scheduler job per center calls it; it has no schedule of its
+own.
 
 Each call (`?center=<id>`), for that center:
 
@@ -41,15 +42,17 @@ npm run sync:dry -- --summary      # plan, write nothing
 npm test                           # unit tests
 npm run sync -- --live --summary   # write + publish
 
-# one center: cp .env.center.example .env.<id>, fill in, then
+# one center from centers.yaml (its passwords through your gcloud sign-in)
 npm run sync:dry -- --center=phoenix --summary
 ```
 
 ## Deploy
 
-`bash deploy/deploy.sh` deploys the function, one daily schedule per center
-and the error email to Google Cloud. It is safe to rerun. See
-[deploy/README.md](deploy/README.md), which also covers adding a center.
+**Merge into `main`.** GitHub Actions tests every pull request and, on a merge,
+deploys the function, keeps one daily Scheduler job per center in step with
+`centers.yaml`, and dry-runs every center. Adding a center is its three
+passwords (`bash deploy/center-secrets.sh <id>`) plus a pull request adding its
+entry. See [deploy/README.md](deploy/README.md).
 
 ## Documentation
 

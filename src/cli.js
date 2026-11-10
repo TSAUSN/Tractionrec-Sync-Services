@@ -4,9 +4,11 @@
  * Local runner for the sync. `npm run sync:dry` plans a run and writes
  * nothing; `npm run sync -- --live` writes.
  *
- *   --center=phoenix                         one center: .env.<id>, else its
- *                                            Secret Manager secret. Without it
- *                                            the settings come from .env
+ *   --center=phoenix                         one center from centers.yaml; its
+ *                                            three secrets are read through the
+ *                                            gcloud CLI (you, signed in; project:
+ *                                            GCP_PROJECT, else gcloud's default).
+ *                                            Without it the settings come from .env
  *   --datasets=tr_products,tr_price_levels   only these (relations to the
  *                                            others resolve from the instance)
  *   --live | --dry                           override DRY_RUN
@@ -27,8 +29,23 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+const { execFileSync } = require("node:child_process");
 const { run } = require("./datasets/run");
+const { loadCenter } = require("./centers");
 const log = require("./logger");
+
+/** A secret's latest value through the gcloud CLI, as the signed-in user. */
+async function gcloudSecret(name) {
+  const args = ["secrets", "versions", "access", "latest", `--secret=${name}`];
+  if (process.env.GCP_PROJECT) {
+    args.push(`--project=${process.env.GCP_PROJECT}`);
+  }
+  try {
+    return execFileSync("gcloud", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (err) {
+    throw new Error(String(err.stderr || err.message).trim().split("\n").pop());
+  }
+}
 
 const args = process.argv.slice(2);
 const overrides = {};
@@ -68,7 +85,12 @@ const brief = (report) => ({
 });
 
 log
-  .withContext(overrides.center ? { center: overrides.center } : {}, () => run(overrides))
+  .withContext(overrides.center ? { center: overrides.center } : {}, async () => {
+    if (overrides.center) {
+      overrides.config = await loadCenter(overrides.center, { readSecret: gcloudSecret });
+    }
+    return run(overrides);
+  })
   .then((report) => {
     process.stdout.write(JSON.stringify(summary ? brief(report) : report, null, 2) + "\n");
     process.exit(report.errorCount > 0 ? 1 : 0);

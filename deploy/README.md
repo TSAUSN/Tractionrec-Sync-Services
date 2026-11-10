@@ -3,27 +3,30 @@
 The sync runs as one HTTP function in Google Cloud (Cloud Run functions, 2nd
 gen) that serves every Kroc center. Each center has its own Traction Rec org,
 its own Zesty instance and its own Cloud Scheduler job, which calls the
-function once a day for that center. Cloud Monitoring emails when a run goes
-wrong. One script sets all of that up and is safe to rerun:
+function once a day for that center.
 
-```bash
-bash deploy/deploy.sh
-```
+- **Settings** (which org, which instance, when) are in
+  [centers.yaml](../centers.yaml), reviewed through pull requests.
+- **Passwords** are in Secret Manager, three per center, entered directly.
+- **Deploying** is merging into `main`: GitHub Actions does the rest.
 
 ```mermaid
 flowchart LR
-  S1["Scheduler job<br/>kroc-tractionrec-sync-phoenix<br/>00:00 America/Phoenix"] -- "POST ?center=phoenix" --> F
-  S2["Scheduler job<br/>kroc-tractionrec-sync-&lt;id&gt;<br/>its own time"] -- "POST ?center=&lt;id&gt;" --> F
-  F["Function<br/>kroc-tractionrec-sync<br/>one run = one center"]
-  E[".env.&lt;id&gt;<br/>on your machine"] -- "deploy/secrets.sh" --> SM
-  SM[("Secret Manager<br/>center-&lt;id&gt;<br/>everything about the center")] -. "read when the run starts" .-> F
-  F -- "read" --> TR["that center's<br/>Traction Rec"]
-  F -- "write + publish" --> Z["that center's<br/>Zesty instance"]
-  F -. "logs, with center" .-> L["Cloud Logging"] -- "errors" --> M["Monitoring alert<br/>email"]
+  subgraph GitHub
+    Y["centers.yaml<br/>(settings, no passwords)"] -- "pull request → review → merge" --> GA["GitHub Actions"]
+  end
+  subgraph "Google Cloud (kroc-services)"
+    GA -- "deploy" --> FN["Function"]
+    GA -- "create / update / delete" --> J["Scheduler job per center"]
+    GA -. "checks the 3 secrets exist" .-> SM
+    SM[("Secret Manager<br/>3 secrets per center")]
+    J -- "POST ?center=&lt;id&gt;" --> FN
+    SM -- "read each run" --> FN
+  end
+  P["person with access"] -- "center-secrets.sh / Console" --> SM
+  FN --> TR["center's Traction Rec"]
+  FN --> Z["center's Zesty instance"]
 ```
-
-Every call carries an OIDC identity token and the `X-Sync-Key` header; the
-function refuses a call missing either one.
 
 ## What's deployed today
 
@@ -32,42 +35,43 @@ function refuses a call missing either one.
 | Project | `kroc-services` (number 1029593951118), region `us-west1` |
 | Function | `kroc-tractionrec-sync`: `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` |
 | Centers | `phoenix` (00:00 America/Phoenix) and `phoenix-2` (00:30 America/Los_Angeles), a test copy of Phoenix with the same org and instance |
+| Deploys | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml): tests on every pull request, deploys on every merge into `main` |
 | Alert email | the `ALERT_EMAIL` in [config.sh](config.sh) |
-
-Shared names and settings are in [config.sh](config.sh). Everything about a
-center is in its `.env.<id>` file on your machine and its `center-<id>` secret
-in Secret Manager.
 
 ## A center
 
-Everything about a center is one file, **`.env.<id>`**, in the repo root
-(gitignored). `<id>` is lowercase letters, digits and hyphens; copy the
-template [.env.center.example](../.env.center.example):
+**Its settings: an entry in [centers.yaml](../centers.yaml).** The id is the
+key: lowercase letters, digits and hyphens.
 
-```
-CENTER_NAME=Kroc Center Phoenix
-TR_LOGIN_URL=https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com
-TR_API_VERSION=v62.0
-TR_CLIENT_ID=…
-TR_CLIENT_SECRET=…
-ZESTY_INSTANCE_ZUID=8-80c0bba6b8-lhkcc7
-ZESTY_INSTANCE_TOKEN=…
-SCHEDULE=0 0 * * *
-TIME_ZONE=America/Phoenix
+```yaml
+phoenix:
+  name: Kroc Center Phoenix
+  tractionRec:
+    loginUrl: https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com
+    apiVersion: v62.0               # optional, default v62.0
+  zesty:
+    instanceZuid: 8-80c0bba6b8-lhkcc7
+  schedule:
+    cron: "0 0 * * *"               # in quotes; five fields
+    timeZone: America/Phoenix       # IANA name
 ```
 
-- A `.env.<id>` counts as a center only when it sets `CENTER_NAME`, so
-  `.env.example` and backups are ignored.
-- [secrets.sh](secrets.sh) copies the file into Secret Manager as
-  **`center-<id>`** (labelled `kroc-sync=center`), and only when the file
-  differs from what's there. The function reads that secret at the start of
-  each run, so **a new or changed center needs no redeploy**: a center exists
-  when its secret does.
-- The deploy script lists the centers from Secret Manager, not from your
-  files, so the `schedule` and `check` steps work from any machine signed in to
-  the project. The file is only needed to create or change a center.
-- None of this is in git. Secret Manager keeps every version of a center, so
-  its history is there (`gcloud secrets versions list center-<id>`).
+`npm test` checks every entry (known keys only, an https org URL, an instance
+ZUID, a five-field cron, a real time zone), so a typo fails the pull request.
+
+**Its passwords: three Secret Manager secrets**, named by a fixed pattern:
+
+| Secret | Holds |
+| --- | --- |
+| `center-<id>-tr-client-id` | Traction Rec connected app: client id |
+| `center-<id>-tr-client-secret` | Traction Rec connected app: client secret |
+| `center-<id>-zesty-token` | Zesty instance access token |
+
+Set them with `bash deploy/center-secrets.sh <id>`, which asks for each value
+hidden as you type, or in the Cloud Console (Security → Secret Manager →
+Create secret). Never in a file. The function reads them by name at the start
+of each run, so a new value is used from the next run on, with no deploy. The
+function may read any `center-*` secret, so a new center needs no extra grant.
 
 The center also needs, outside this repo:
 
@@ -81,115 +85,93 @@ The center also needs, outside this repo:
   `TREX1__…` objects. Check that the org has the fields the sync reads; the
   Register link (`Deep_Link_URL__c`) is a field Phoenix's org added itself.
 
-### Adding a center
+## Everyday tasks
 
-```bash
-cp .env.center.example .env.<id>   # fill it in; pick the center's own time zone
-npm run sync:dry -- --center=<id> --summary   # locally: plans, writes nothing
+| Task | Steps | Reaches Google Cloud |
+| --- | --- | --- |
+| **Add a center** | 1. `bash deploy/center-secrets.sh <id>` (its three passwords). 2. Pull request adding its entry to `centers.yaml`. 3. Review, merge. | On merge: the deploy checks its secrets, creates its job and dry-runs it. A missing secret stops the deploy and names it. |
+| **Change a run time** | Pull request editing its `schedule`; merge. | On merge: the job moves. |
+| **New password or token** | `bash deploy/center-secrets.sh <id>` (Enter keeps the others), or a new version in the Console. | The next run uses it. |
+| **Point a center at production Traction Rec** | New values for its two Traction Rec secrets, plus a pull request changing its `loginUrl`; merge. | On merge. Every Salesforce Id changes, so its datasets need a clean rebuild first ([AGENTS.md](../AGENTS.md) §8). |
+| **Remove a center** | Pull request deleting its entry; merge. Then delete its three secrets. | On merge: its job is deleted. |
+| **Code change** | Pull request; review; merge. | On merge: deployed and dry-run for every center. |
+| **Run a center now** | `gcloud scheduler jobs run kroc-tractionrec-sync-<id> --location=us-west1`, or "Force run" in the Console. | Immediately. |
+| **Pause / resume a center** | `gcloud scheduler jobs pause kroc-tractionrec-sync-<id> --location=us-west1` (`resume`). | Immediately. |
+| **Read a center's last runs** | `gcloud logging read 'resource.labels.service_name="kroc-tractionrec-sync" AND jsonPayload.message="sync.done" AND jsonPayload.center="<id>"' --limit=5 --format='value(timestamp,jsonPayload.errorCount,jsonPayload.durationMs)'` | |
+| **Roll back** | Revert the commit on `main` (a pull request); merge. | On merge. |
 
-bash deploy/secrets.sh <id>                   # its secret
-bash deploy/deploy.sh schedule check          # its job, and a dry run over HTTP
-```
+## How a merge deploys
 
-No function redeploy. The first live run for a new instance creates every
-item and page, which takes a few minutes; to watch it, run the job by hand
-(below).
+[deploy.yml](../.github/workflows/deploy.yml) runs:
 
-### Removing a center
-
-Nothing in the scripts deletes, so remove its job and its secret by hand,
-then its file:
-
-```bash
-gcloud scheduler jobs delete kroc-tractionrec-sync-<id> --location=us-west1
-gcloud secrets delete center-<id>
-rm .env.<id>
-```
-
-The function answers that center with 404 from then on.
-
-## Before the first deploy
-
-You need, on the machine you deploy from:
-
-1. **The gcloud CLI**, signed in to an account with access to the project:
-   ```bash
-   gcloud auth login
-   gcloud config set project kroc-services
-   ```
-   Owner on the project covers everything. Without Owner, the account needs:
-   Service Usage Admin, Service Account Admin, Service Account User,
-   Secret Manager Admin, Cloud Functions Admin, Cloud Run Admin, Cloud
-   Scheduler Admin and Monitoring Editor.
-2. **`node`, `git`, `curl` and `openssl`.**
-3. **A `.env.<id>` for each center** whose secret isn't in Secret Manager yet
-   (a center already there needs no file).
-   `SYNC_TRIGGER_KEY` in `.env` can stay empty: the first deploy generates one.
-
-## Deploy
-
-```bash
-bash deploy/deploy.sh                  # every step, in order
-bash deploy/deploy.sh function check   # only these steps
-```
-
-| Step | What it does |
+| When | Does |
 | --- | --- |
-| `apis` | Turns on the Google Cloud products the sync uses. A new project has them off. |
-| `accounts` | Creates two service accounts: `kroc-sync-runtime`, which the function runs as and which can only read its secrets, and `kroc-sync-scheduler`, which the Scheduler jobs use to call the function. |
-| `secrets` | Creates the trigger key if missing, and uploads every `.env.<id>` on this machine to its `center-<id>` secret when it differs ([secrets.sh](secrets.sh)). |
-| `function` | Uploads this folder and deploys it. Takes about 1.5 minutes. |
-| `invoker` | Lets only `kroc-sync-scheduler` call the function. |
-| `schedule` | Creates or updates one daily job per center secret, `kroc-tractionrec-sync-<id>`, at its `SCHEDULE` and `TIME_ZONE`. Reports a job that matches no center; never deletes one. |
-| `alerts` | Creates or updates the error email ([alerts.sh](alerts.sh)). |
-| `check` | Calls the function as you with `?center=<id>&dry=1` for every center: full runs that write nothing. Fails unless each returns 0 errors. |
+| Every pull request | `npm ci`, `npm test` (including `centers.yaml`), and lists the centers |
+| Every merge into `main` (and "Run workflow" on `main`) | the tests, then `bash deploy/deploy.sh verify function schedule check` as the deployer account |
 
-Each step looks at what exists and only creates or changes what's missing or
-different. A full rerun is therefore safe, and it's also how you'd set the
-whole thing up in a new project: change `PROJECT` in `config.sh` (or
-`PROJECT=… bash deploy/deploy.sh`) and run it.
-
-## Common tasks
-
-| Task | Command |
+| Step | Does |
 | --- | --- |
-| Deploy a code change | `bash deploy/deploy.sh function check` |
-| Run one center now | `gcloud scheduler jobs run kroc-tractionrec-sync-<id> --location=us-west1` |
-| Change a center's time | edit `SCHEDULE` / `TIME_ZONE` in `.env.<id>`, then `bash deploy/secrets.sh <id> && bash deploy/deploy.sh schedule` |
-| New credentials for a center | update `.env.<id>`, then `bash deploy/secrets.sh <id>`. The next run uses them; nothing to redeploy. |
-| New trigger key | empty `SYNC_TRIGGER_KEY` in `.env`, then `bash deploy/secrets.sh --rotate-key && bash deploy/deploy.sh function schedule check` (the function and every job must get it together, or calls get 403) |
-| Pause / resume a center | `gcloud scheduler jobs pause kroc-tractionrec-sync-<id> --location=us-west1` (`resume` to restart) |
-| Read a center's last runs | `gcloud logging read 'resource.labels.service_name="kroc-tractionrec-sync" AND jsonPayload.message="sync.done" AND jsonPayload.center="<id>"' --limit=5 --format='value(timestamp,jsonPayload.errorCount,jsonPayload.durationMs)'` |
-| Roll back | check out the previous commit, then `bash deploy/deploy.sh function check` |
-| Switch a center to production Traction Rec | change `TR_LOGIN_URL` and the client id + secret in its `.env.<id>`, then `bash deploy/secrets.sh <id> && bash deploy/deploy.sh check`. Every Salesforce Id changes, so its datasets need a clean rebuild first (see [AGENTS.md](../AGENTS.md) §8). |
+| `verify` | every center in `centers.yaml` has its three secrets; stops the deploy before anything changes if not |
+| `function` | deploys the code, with `centers.yaml`; about 1.5 minutes |
+| `schedule` | one job per center at its `schedule`; a job whose center left `centers.yaml` is deleted |
+| `check` | a dry run per center over HTTP (`?center=<id>&dry=1`): full runs that write nothing; fails on any error |
 
-`secrets.sh` without ids uploads every center file on this machine; a center
-without its file here keeps its secret. It never changes the trigger key;
-that's `--rotate-key`.
+**How Actions signs in: Workload Identity Federation.** Google trusts the
+tokens GitHub issues to workflows of `TSAUSN/Tractionrec-Sync-Services` on
+`main`, and nothing else, and lets them act as `kroc-sync-deployer`. No key is
+stored in GitHub. Pull requests, including ones from forks of this public repo,
+can't deploy. One deploy runs at a time.
+
+What the deployer may do: deploy the function; manage Scheduler jobs; see
+that secrets exist (not read them); read the trigger key (the jobs send it);
+call the function (the dry runs); act as the accounts the function, its build
+and the jobs run as. It can't read a center's passwords.
+
+## One-time setup (a project Owner)
+
+Done once for the project; rerunnable. From a machine with the gcloud CLI
+signed in as an Owner of `kroc-services`, plus `node` and `npm ci`:
+
+```bash
+bash deploy/deploy.sh apis accounts access github secrets invoker alerts
+```
+
+| Step | Does |
+| --- | --- |
+| `apis` | turns on the Google Cloud products the sync and the GitHub trust use |
+| `accounts` | three service accounts: `kroc-sync-runtime` (the function), `kroc-sync-scheduler` (calls it), `kroc-sync-deployer` (GitHub Actions) |
+| `access` | the function reads `center-*` secrets and the trigger key; the deployer's permissions (above) |
+| `github` | the Workload Identity pool and provider, limited to this repository's `main`, and the deployer binding |
+| `secrets` | the shared trigger key, `sync-trigger-key` ([secrets.sh](secrets.sh)) |
+| `invoker` | the scheduler and the deployer may call the function |
+| `alerts` | the error email ([alerts.sh](alerts.sh)) |
+
+Every step can also be run by hand, e.g. `bash deploy/deploy.sh check`, which
+dry-runs every center as you. With no steps named, it runs them all, in the
+order listed at the top of [deploy.sh](deploy.sh).
 
 ## Things that matter
 
-- **The function step uploads this folder as it is on disk**, including
-  uncommitted changes (the script warns when there are any). Deploy from a
-  clean checkout of `main`. [.gcloudignore](../.gcloudignore) limits the upload
-  to `src/`, `zesty-models/` and the package files; `.env` and `.env.<id>`
-  are never uploaded.
+- **`centers.yaml` is the list.** A center not in it gets 404 from the
+  function, and its job is deleted on the next merge.
 - **`DRY_RUN=0` is set by the deploy.** The code defaults to a dry run, so a
   function deployed without it would look healthy and write nothing.
 - **One request at a time** (`--max-instances=1 --concurrency=1`). The code
   has no lock, and two overlapping runs of the same center could create the
-  same item twice. A call that arrives during another run waits for it; in a
-  test, two centers fired together both finished with 200. Give centers
-  different start times anyway.
+  same item twice. A call that arrives during another run waits for it. Give
+  centers different start times anyway.
 - **Two locks on the function.** A caller needs a Google identity that is
   allowed to call it *and* the `X-Sync-Key` header. Either one missing gets a
   403. A call without `?center=` gets 400, an unknown center 404.
-- **Secrets are never printed.** The schedule step does pass the trigger key
-  to gcloud as an argument, so run it on a machine you trust.
+- **A new trigger key** has to reach the function and every job together:
+  `bash deploy/secrets.sh --rotate-key`, then `bash deploy/deploy.sh function
+  schedule check` (or a merge). In between, calls get 403.
+- **[.gcloudignore](../.gcloudignore)** limits the upload to `src/`,
+  `zesty-models/`, `centers.yaml` and the package files. `.env` and the
+  credential file the GitHub auth step writes are never uploaded.
 - **An error alert** fires for any center on a run with errors, a failed run,
   any ERROR log line, or a failed Scheduler call. Every log line carries the
-  center id, so the log entry in the email names the center. At most one email
-  per 5 minutes.
+  center id. At most one email per 5 minutes.
 
 ## Why `gcloud functions deploy`
 

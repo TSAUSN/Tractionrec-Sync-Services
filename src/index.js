@@ -12,8 +12,8 @@ const log = require("./logger");
  * IAM, so a misconfigured binding cannot turn the endpoint into an open write
  * path into the CMS.
  *
- *   ?center=phoenix                          required: a center (Secret Manager
- *                                            "center-<id>"; src/centers.js)
+ *   ?center=phoenix                          required: a center in centers.yaml
+ *                                            (its secrets: src/centers.js)
  *   &datasets=tr_classes,tr_price_levels     only these datasets
  *   &dry=1                                   plan, write nothing
  */

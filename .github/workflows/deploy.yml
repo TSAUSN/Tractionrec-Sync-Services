@@ -1,0 +1,63 @@
+# Tests every pull request; deploys every merge into main.
+#
+# Deploy = deploy/deploy.sh verify function schedule check:
+#   verify    every center in centers.yaml has its three secrets (stops here if not)
+#   function  the code, with centers.yaml
+#   schedule  one Scheduler job per center; jobs of removed centers are deleted
+#   check     a dry run per center over HTTP: plans, writes nothing
+#
+# Google Cloud access is Workload Identity Federation: Google trusts tokens
+# GitHub issues to this repository's main branch only, and lets them act as
+# the deployer account. No key is stored here. Set up once by a project Owner:
+# bash deploy/deploy.sh accounts access github (deploy/README.md).
+name: test and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Centers in centers.yaml
+        run: |
+          node -e 'for (const c of require("./src/centers").listCenters())
+            console.log(`${c.id}: ${c.name} | ${c.schedule.cron} ${c.schedule.timeZone} | ${c.zesty.instanceZuid}`)'
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    # One deploy at a time; a newer one waits instead of cancelling a running one.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1029593951118/locations/global/workloadIdentityPools/github/providers/github
+          service_account: kroc-sync-deployer@kroc-services.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: bash deploy/deploy.sh verify function schedule check

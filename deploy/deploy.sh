@@ -3,23 +3,26 @@
 # exists and creates or updates only what's missing or different, so the whole
 # script is safe to rerun. Run from anywhere:
 #
-#   bash deploy/deploy.sh                    every step, in order
-#   bash deploy/deploy.sh function check     only these steps (a code redeploy)
+#   bash deploy/deploy.sh                    every step, in order (a person, as Owner)
+#   bash deploy/deploy.sh function check     only these steps
+#
+# Merging into main runs `verify function schedule check` from GitHub Actions
+# (.github/workflows/deploy.yml); the other steps are one-time setup.
 #
 # Steps:
 #   apis      switch on the Google Cloud products the sync uses
-#   accounts  the two service accounts (runtime, scheduler caller)
-#   secrets   Secret Manager values from .env (deploy/secrets.sh)
-#   function  deploy the code from this folder
-#   invoker   let only the scheduler account call the function
-#   schedule  one Cloud Scheduler job per center in Secret Manager
+#   accounts  the service accounts: runtime, scheduler caller, deployer (CI)
+#   access    who may read which secret, and what the deployer may change
+#   github    let GitHub Actions on main deploy as the deployer, with no key
+#   secrets   the shared trigger key (deploy/secrets.sh)
+#   verify    every center in centers.yaml has its three secrets
+#   function  deploy the code (with centers.yaml) from this folder
+#   invoker   who may call the function: the scheduler and the deployer
+#   schedule  one Scheduler job per center in centers.yaml; delete the rest
 #   alerts    the error email (deploy/alerts.sh)
 #   check     a dry run over HTTP for every center: plans, writes nothing
 #
-# Names and settings: deploy/config.sh. Centers: the center-<id> secrets
-# (deploy/secrets.sh copies them from .env.<id>), so the schedule and check
-# steps work from any machine signed in to the project.
-# Secrets are never printed.
+# Names and settings: deploy/config.sh. Secrets are never printed.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -27,7 +30,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/config.sh"
 cd "$DIR/.."
 
-ALL=(apis accounts secrets function invoker schedule alerts check)
+ALL=(apis accounts access github secrets verify function invoker schedule alerts check)
 STEPS=("$@")
 [ ${#STEPS[@]} -gt 0 ] || STEPS=("${ALL[@]}")
 
@@ -36,7 +39,8 @@ step_apis() {
     cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com \
     artifactregistry.googleapis.com secretmanager.googleapis.com \
     cloudscheduler.googleapis.com logging.googleapis.com \
-    monitoring.googleapis.com iam.googleapis.com
+    monitoring.googleapis.com iam.googleapis.com \
+    iamcredentials.googleapis.com sts.googleapis.com cloudresourcemanager.googleapis.com
   echo "✔ APIs enabled"
 }
 
@@ -53,10 +57,95 @@ ensure_sa() { # email display-name
 step_accounts() {
   ensure_sa "$RUNTIME_SA" "KROC sync function runtime"
   ensure_sa "$SCHEDULER_SA" "KROC sync scheduler caller"
+  ensure_sa "$DEPLOYER_SA" "KROC sync deployer (GitHub Actions)"
+}
+
+project_role() { # member role [condition]
+  gcloud projects add-iam-policy-binding "$PROJECT" --member="$1" --role="$2" \
+    --condition="${3:-None}" >/dev/null
+}
+
+act_as() { # service account the deployer may run things as
+  gcloud iam service-accounts add-iam-policy-binding "$1" --project="$PROJECT" \
+    --member="serviceAccount:${DEPLOYER_SA}" --role=roles/iam.serviceAccountUser >/dev/null
+}
+
+step_access() {
+  local num
+  num="$(project_number)"
+  # The function reads any center-* secret, so a new center needs no grant.
+  project_role "serviceAccount:${RUNTIME_SA}" roles/secretmanager.secretAccessor \
+    "expression=resource.name.startsWith(\"projects/${num}/secrets/center-\"),title=center secrets,description=The sync reads each center's secrets"
+  gcloud secrets add-iam-policy-binding sync-trigger-key --project="$PROJECT" \
+    --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor >/dev/null 2>&1 || true
+  echo "✔ $RUNTIME_SA reads center-* secrets and the trigger key"
+
+  # The deployer: deploy the function, keep the jobs, see (not read) center
+  # secrets, read the trigger key (the jobs send it), act as the accounts the
+  # function, its build and the jobs run as.
+  project_role "serviceAccount:${DEPLOYER_SA}" roles/cloudfunctions.developer
+  project_role "serviceAccount:${DEPLOYER_SA}" roles/cloudscheduler.admin
+  project_role "serviceAccount:${DEPLOYER_SA}" roles/secretmanager.viewer
+  gcloud secrets add-iam-policy-binding sync-trigger-key --project="$PROJECT" \
+    --member="serviceAccount:${DEPLOYER_SA}" --role=roles/secretmanager.secretAccessor >/dev/null 2>&1 || true
+  act_as "$RUNTIME_SA"
+  act_as "$SCHEDULER_SA"
+  act_as "${num}-compute@developer.gserviceaccount.com"
+  echo "✔ $DEPLOYER_SA: deploy function, Scheduler jobs, secret names, trigger key"
+}
+
+step_github() {
+  local num pool provider
+  num="$(project_number)"
+  pool="projects/${num}/locations/global/workloadIdentityPools/${WIF_POOL}"
+  if gcloud iam workload-identity-pools describe "$WIF_POOL" --location=global --project="$PROJECT" >/dev/null 2>&1; then
+    echo "• identity pool $WIF_POOL exists"
+  else
+    gcloud iam workload-identity-pools create "$WIF_POOL" --location=global --project="$PROJECT" \
+      --display-name="GitHub Actions" >/dev/null
+    echo "✔ identity pool $WIF_POOL created"
+  fi
+  # Only tokens GitHub issues to this repository's main branch are accepted.
+  local args=(--location=global --project="$PROJECT" --workload-identity-pool="$WIF_POOL"
+    --issuer-uri="https://token.actions.githubusercontent.com"
+    --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref"
+    --attribute-condition="assertion.repository=='${GITHUB_REPO}' && assertion.ref=='refs/heads/${GITHUB_BRANCH}'")
+  if gcloud iam workload-identity-pools providers describe "$WIF_PROVIDER" --location=global \
+      --workload-identity-pool="$WIF_POOL" --project="$PROJECT" >/dev/null 2>&1; then
+    gcloud iam workload-identity-pools providers update-oidc "$WIF_PROVIDER" "${args[@]}" >/dev/null 2>&1
+    echo "✔ provider $WIF_PROVIDER updated: $GITHUB_REPO @ $GITHUB_BRANCH"
+  else
+    gcloud iam workload-identity-pools providers create-oidc "$WIF_PROVIDER" "${args[@]}" >/dev/null
+    echo "✔ provider $WIF_PROVIDER created: $GITHUB_REPO @ $GITHUB_BRANCH"
+  fi
+  gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SA" --project="$PROJECT" \
+    --role=roles/iam.workloadIdentityUser \
+    --member="principalSet://iam.googleapis.com/${pool}/attribute.repository/${GITHUB_REPO}" >/dev/null
+  provider="${pool}/providers/${WIF_PROVIDER}"
+  echo "✔ $GITHUB_REPO may deploy as $DEPLOYER_SA"
+  echo "  workflow settings: workload_identity_provider=${provider}"
+  echo "                     service_account=${DEPLOYER_SA}"
 }
 
 step_secrets() {
   bash "$DIR/secrets.sh"
+}
+
+step_verify() {
+  local id name missing=0
+  for id in $(center_ids); do
+    for name in $(center_secret_names "$id"); do
+      if gcloud secrets versions list "$name" --project="$PROJECT" --filter="state=ENABLED" \
+          --limit=1 --format="value(name)" 2>/dev/null | grep -q .; then
+        :
+      else
+        echo "✘ $id: secret $name is missing or has no enabled version"
+        missing=1
+      fi
+    done
+    [ "$missing" = 1 ] || echo "✔ $id: its 3 secrets exist"
+  done
+  [ "$missing" = 0 ] || { echo "  Create them with: bash deploy/center-secrets.sh <id>"; exit 1; }
 }
 
 step_function() {
@@ -65,7 +154,7 @@ step_function() {
   fi
   # DRY_RUN=0 is required: the code defaults to a dry run. One instance, one
   # request at a time, because the code has no lock (AGENTS.md §5). Center
-  # secrets are not bound here: the function reads center-<id> per run.
+  # secrets are not bound here: the function reads them per run, by name.
   gcloud functions deploy "$FUNCTION" \
     --gen2 --runtime=nodejs22 --region="$REGION" --project="$PROJECT" \
     --service-account="$RUNTIME_SA" \
@@ -83,9 +172,12 @@ function_url() {
 }
 
 step_invoker() {
-  gcloud functions add-invoker-policy-binding "$FUNCTION" --region="$REGION" \
-    --project="$PROJECT" --member="serviceAccount:${SCHEDULER_SA}" >/dev/null
-  echo "✔ $SCHEDULER_SA may call $FUNCTION"
+  local sa
+  for sa in "$SCHEDULER_SA" "$DEPLOYER_SA"; do
+    gcloud functions add-invoker-policy-binding "$FUNCTION" --region="$REGION" \
+      --project="$PROJECT" --member="serviceAccount:${sa}" >/dev/null
+    echo "✔ $sa may call $FUNCTION"
+  done
 }
 
 trigger_key() {
@@ -93,15 +185,16 @@ trigger_key() {
 }
 
 step_schedule() {
-  local url key id job cron tz name verb headers_flag
+  local url key id job cron tz name verb headers_flag ids
   url="$(function_url)"
   [ -n "$url" ] || { echo "✘ function not deployed yet: run the function step first"; exit 1; }
   key="$(trigger_key)"
-  for id in $(center_ids); do
+  ids="$(center_ids)"
+  for id in $ids; do
     job="${JOB_PREFIX}${id}"
-    cron="$(center_field "$id" SCHEDULE)"
-    tz="$(center_field "$id" TIME_ZONE)"
-    name="$(center_field "$id" CENTER_NAME)"
+    cron="$(center_field "$id" schedule.cron)"
+    tz="$(center_field "$id" schedule.timeZone)"
+    name="$(center_field "$id" name)"
     if gcloud scheduler jobs describe "$job" --location="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
       verb=update headers_flag=--update-headers
     else
@@ -118,15 +211,18 @@ step_schedule() {
       >/dev/null
     echo "✔ $job ${verb}d: '$cron' $tz"
   done
-  # Jobs that call this function but match no center are reported, never
-  # deleted: pause or delete them by hand.
+  # A job that calls this function but whose center left centers.yaml is
+  # deleted: centers.yaml is the list, and its changes are reviewed.
   local known
-  known=" $(center_ids | sed "s|^|${JOB_PREFIX}|" | tr '\n' ' ') "
+  known=" $(printf '%s\n' $ids | sed "s|^|${JOB_PREFIX}|" | tr '\n' ' ') "
   for job in $(gcloud scheduler jobs list --location="$REGION" --project="$PROJECT" \
       --format="value(name.basename())" --filter="httpTarget.uri:${url}"); do
     case "$known" in
       *" $job "*) ;;
-      *) echo "⚠ $job calls this function but matches no center secret: pause or delete it" ;;
+      *)
+        gcloud scheduler jobs delete "$job" --location="$REGION" --project="$PROJECT" --quiet >/dev/null
+        echo "✔ $job deleted: its center is not in centers.yaml"
+        ;;
     esac
   done
 }
@@ -136,9 +232,15 @@ step_alerts() {
 }
 
 step_check() {
-  local url token key id out code failed=0
+  local url token key id out code failed=0 account
   url="$(function_url)"
-  token="$(gcloud auth print-identity-token)"
+  account="$(gcloud config get-value account 2>/dev/null || true)"
+  # A service account (CI) needs the audience named; a person's token can't take one.
+  if [[ "$account" == *.gserviceaccount.com ]]; then
+    token="$(gcloud auth print-identity-token --audiences="$url")"
+  else
+    token="$(gcloud auth print-identity-token)"
+  fi
   key="$(trigger_key)"
   out="$(mktemp)"
   for id in $(center_ids); do

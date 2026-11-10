@@ -1,0 +1,47 @@
+# The Kroc centers this sync serves: one entry per center, keyed by its id
+# (lowercase letters, digits and hyphens). Settings only, never passwords.
+#
+# Each center's three passwords live in Secret Manager (project kroc-services):
+#   center-<id>-tr-client-id       Traction Rec connected app: client id
+#   center-<id>-tr-client-secret   Traction Rec connected app: client secret
+#   center-<id>-zesty-token        Zesty instance access token
+# Create them before adding the entry: bash deploy/center-secrets.sh <id>
+#
+# Merging a change to this file into main deploys it (.github/workflows/):
+# a new entry gets its Scheduler job, a changed schedule moves it, a removed
+# entry's job is deleted. Validated by npm test.
+#
+#   <id>:
+#     name: shown in logs and on the Scheduler job
+#     tractionRec:
+#       loginUrl: https://<org>.my.salesforce.com
+#       apiVersion: v62.0               (optional, default v62.0)
+#     zesty:
+#       instanceZuid: 8-…
+#     schedule:
+#       cron: "0 0 * * *"               (five fields, in the time zone below)
+#       timeZone: America/Phoenix       (IANA name)
+
+phoenix:
+  name: Kroc Center Phoenix
+  tractionRec:
+    loginUrl: https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com
+    apiVersion: v62.0
+  zesty:
+    instanceZuid: 8-80c0bba6b8-lhkcc7
+  schedule:
+    cron: "0 0 * * *"
+    timeZone: America/Phoenix
+
+# A test copy of Phoenix (same org, same instance, so its runs write nothing
+# new). Remove it, and its secrets, once a real second center exists.
+phoenix-2:
+  name: Phoenix again (multi-center test)
+  tractionRec:
+    loginUrl: https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com
+    apiVersion: v62.0
+  zesty:
+    instanceZuid: 8-80c0bba6b8-lhkcc7
+  schedule:
+    cron: "30 0 * * *"
+    timeZone: America/Los_Angeles

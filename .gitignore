@@ -2,6 +2,8 @@ node_modules/
 .env
 .env.*
 !.env.example
-!.env.center.example
 *.log
 .sync-state.json
+
+# Written by google-github-actions/auth into the workspace; never commit or upload
+gha-creds-*.json

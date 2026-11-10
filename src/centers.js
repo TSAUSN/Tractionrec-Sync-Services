@@ -3,13 +3,10 @@
 /**
  * Kroc centers: one Traction Rec org and one Zesty instance each.
  *
- * Everything about a center is one set of KEY=value settings (CENTER_KEYS):
- *   - locally, the file .env.<id> in the repo root (gitignored). A file
- *     counts as a center only when it sets CENTER_NAME, so .env.example and
- *     backups are ignored;
- *   - deployed, the Secret Manager secret "center-<id>" (the same settings as
- *     JSON), read when a run starts. A center exists when its secret does, so
- *     adding one needs no redeploy.
+ * centers.yaml (repo root, shipped with the code) is the list: each center's
+ * settings, never its passwords. A center exists when it has an entry there.
+ * Its three passwords are separate Secret Manager secrets, read by name when
+ * a run starts (SECRETS below). Merging a change to centers.yaml deploys it.
  *
  * loadCenter() returns the same shape as config.load(), so a run doesn't care
  * where its settings came from.
@@ -17,28 +14,22 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const yaml = require("js-yaml");
 
-const ROOT = path.join(__dirname, "..");
+const REGISTRY = path.join(__dirname, "..", "centers.yaml");
 const ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-const CENTER_KEYS = {
-  required: [
-    "CENTER_NAME",
-    "TR_LOGIN_URL",
-    "TR_CLIENT_ID",
-    "TR_CLIENT_SECRET",
-    "ZESTY_INSTANCE_ZUID",
-    "ZESTY_INSTANCE_TOKEN",
-    "SCHEDULE",
-    "TIME_ZONE"
-  ],
-  optional: ["TR_API_VERSION"]
-};
-const ALL_KEYS = [...CENTER_KEYS.required, ...CENTER_KEYS.optional];
+/** The three per-center secrets: their name suffix and the config they fill. */
+const SECRETS = [
+  { suffix: "tr-client-id", label: "Traction Rec client id" },
+  { suffix: "tr-client-secret", label: "Traction Rec client secret" },
+  { suffix: "zesty-token", label: "Zesty instance token" }
+];
+
+const secretNames = (id) => SECRETS.map((s) => `center-${id}-${s.suffix}`);
 
 const bool = (v, dflt) => (v === undefined || v === "" ? dflt : v === "1" || v === "true");
 
-const secretName = (id) => `center-${id}`;
 const isCenterId = (id) => ID.test(id || "");
 
 function unknownCenter(id) {
@@ -47,114 +38,138 @@ function unknownCenter(id) {
   return err;
 }
 
-/** KEY=value lines, quotes stripped; comments and blank lines ignored. */
-function parseEnv(text) {
-  const out = {};
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (m) {
-      out[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
-    }
+function validTimeZone(tz) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
   }
-  return out;
 }
 
-/** Only the center keys, checked; throws naming every problem. */
-function checkCenter(id, env, where) {
+const KNOWN = {
+  "": ["name", "tractionRec", "zesty", "schedule"],
+  tractionRec: ["loginUrl", "apiVersion"],
+  zesty: ["instanceZuid"],
+  schedule: ["cron", "timeZone"]
+};
+
+/** Every problem with one entry, as strings (empty when it's valid). */
+function centerProblems(id, c) {
   const problems = [];
   if (!isCenterId(id)) {
-    problems.push(`id "${id}" must be lowercase letters, digits and hyphens`);
+    problems.push("the id must be lowercase letters, digits and hyphens");
   }
-  const missing = CENTER_KEYS.required.filter((k) => !env[k]);
-  if (missing.length) {
-    problems.push(`missing ${missing.join(", ")}`);
+  if (!c || typeof c !== "object" || Array.isArray(c)) {
+    return [...problems, "must be a mapping of settings"];
   }
-  if (env.TR_LOGIN_URL && !/^https:\/\//.test(env.TR_LOGIN_URL)) {
-    problems.push("TR_LOGIN_URL must be an https URL");
+  for (const [group, keys] of Object.entries(KNOWN)) {
+    const obj = group ? c[group] : c;
+    if (group && (obj === undefined || typeof obj !== "object" || obj === null)) {
+      problems.push(`${group} is missing`);
+      continue;
+    }
+    for (const k of Object.keys(obj)) {
+      if (!keys.includes(k)) {
+        problems.push(`unknown setting ${group ? `${group}.` : ""}${k}`);
+      }
+    }
   }
-  if (env.ZESTY_INSTANCE_ZUID && !/^8-[0-9a-f]+-[0-9a-z]+$/.test(env.ZESTY_INSTANCE_ZUID)) {
-    problems.push("ZESTY_INSTANCE_ZUID must be an instance ZUID (8-…)");
+  if (!c.name || typeof c.name !== "string") {
+    problems.push("name is missing");
   }
-  if (env.SCHEDULE && env.SCHEDULE.trim().split(/\s+/).length !== 5) {
-    problems.push("SCHEDULE must be a five-field cron expression");
+  if (!/^https:\/\/[^\s/]+/.test(c.tractionRec?.loginUrl || "")) {
+    problems.push("tractionRec.loginUrl must be an https URL");
   }
+  if (c.tractionRec?.apiVersion !== undefined && !/^v\d+\.\d+$/.test(c.tractionRec.apiVersion)) {
+    problems.push("tractionRec.apiVersion must look like v62.0");
+  }
+  if (!/^8-[0-9a-f]+-[0-9a-z]+$/.test(c.zesty?.instanceZuid || "")) {
+    problems.push("zesty.instanceZuid must be an instance ZUID (8-…)");
+  }
+  if (typeof c.schedule?.cron !== "string" || c.schedule.cron.trim().split(/\s+/).length !== 5) {
+    problems.push("schedule.cron must be a five-field cron expression, in quotes");
+  }
+  if (!c.schedule?.timeZone || !validTimeZone(c.schedule.timeZone)) {
+    problems.push("schedule.timeZone must be an IANA time zone, e.g. America/Phoenix");
+  }
+  return problems;
+}
+
+/** The registry, checked: [{ id, name, tractionRec, zesty, schedule }], in file order. */
+function listCenters(file = REGISTRY) {
+  const doc = yaml.load(fs.readFileSync(file, "utf8"), { filename: file }) || {};
+  if (typeof doc !== "object" || Array.isArray(doc)) {
+    throw new Error(`${path.basename(file)}: must be a mapping of center id -> settings`);
+  }
+  const problems = Object.entries(doc).flatMap(([id, c]) =>
+    centerProblems(id, c).map((p) => `${id}: ${p}`)
+  );
   if (problems.length) {
-    throw new Error(`${where}: ${problems.join("; ")}`);
+    throw new Error(`${path.basename(file)}:\n  ${problems.join("\n  ")}`);
   }
-  return Object.fromEntries(ALL_KEYS.filter((k) => env[k]).map((k) => [k, env[k]]));
+  return Object.entries(doc).map(([id, c]) => ({ id, ...c }));
 }
 
-/** The centers defined on this machine: [{ id, env }], ordered by id. */
-function listLocalCenters(root = ROOT) {
-  return fs
-    .readdirSync(root)
-    .map((f) => f.match(/^\.env\.(.+)$/))
-    .filter((m) => m && isCenterId(m[1]))
-    .map((m) => ({ id: m[1], env: parseEnv(fs.readFileSync(path.join(root, m[0]), "utf8")) }))
-    .filter((c) => c.env.CENTER_NAME)
-    .map((c) => ({ id: c.id, env: checkCenter(c.id, c.env, `.env.${c.id}`) }))
-    .sort((a, b) => a.id.localeCompare(b.id));
-}
-
-/** A center's settings from .env.<id>, or null when it isn't a center file here. */
-function readLocalCenter(id, root = ROOT) {
-  const file = path.join(root, `.env.${id}`);
-  if (!isCenterId(id) || !fs.existsSync(file)) {
-    return null;
+/** One center by id; UNKNOWN_CENTER if it isn't in the registry. */
+function getCenter(id, file = REGISTRY) {
+  const center = isCenterId(id) && listCenters(file).find((c) => c.id === id);
+  if (!center) {
+    throw unknownCenter(id);
   }
-  const env = parseEnv(fs.readFileSync(file, "utf8"));
-  return env.CENTER_NAME ? checkCenter(id, env, `.env.${id}`) : null;
+  return center;
 }
 
-/** A center's settings from Secret Manager ("center-<id>", latest version). */
-async function readSecretManager(id) {
+/** One secret's latest value through the Secret Manager client (the function). */
+async function readSecretManager(name) {
   const { SecretManagerServiceClient } = require("@google-cloud/secret-manager");
   const client = new SecretManagerServiceClient();
   const project = process.env.GCP_PROJECT || (await client.getProjectId());
-  try {
-    const [version] = await client.accessSecretVersion({
-      name: `projects/${project}/secrets/${secretName(id)}/versions/latest`
-    });
-    return JSON.parse(version.payload.data.toString("utf8"));
-  } catch (err) {
-    // NOT_FOUND, or PERMISSION_DENIED: the runtime account is granted each
-    // center secret one by one, so a secret that doesn't exist reads as denied.
-    if (err.code === 5 || err.code === 7) {
-      throw unknownCenter(id);
-    }
-    throw err;
-  }
+  const [version] = await client.accessSecretVersion({
+    name: `projects/${project}/secrets/${name}/versions/latest`
+  });
+  return version.payload.data.toString("utf8");
 }
 
-/** A center's checked settings: .env.<id> when it's here, else Secret Manager. */
-async function readCenter(id, { root = ROOT, readSecret = readSecretManager } = {}) {
-  if (!isCenterId(id)) {
-    throw unknownCenter(id);
-  }
-  const local = readLocalCenter(id, root);
-  if (local) {
-    return local;
-  }
-  return checkCenter(id, await readSecret(id), `secret ${secretName(id)}`);
-}
-
-/** The run config for one center (same shape as config.load()). */
-async function loadCenter(id, opts) {
-  const env = await readCenter(id, opts);
+/**
+ * The run config for one center (same shape as config.load()): its registry
+ * entry plus its three secrets. `readSecret(name)` returns a secret's value;
+ * the CLI passes one that goes through the gcloud CLI.
+ */
+async function loadCenter(id, { file = REGISTRY, readSecret = readSecretManager } = {}) {
+  const center = getCenter(id, file);
+  const names = secretNames(id);
+  const values = await Promise.all(
+    names.map(async (name, i) => {
+      try {
+        const v = (await readSecret(name)).trim();
+        if (!v) {
+          throw new Error("it is empty");
+        }
+        return v;
+      } catch (err) {
+        throw new Error(
+          `Center "${id}": can't read secret ${name} (${SECRETS[i].label}): ${err.message}. ` +
+            `Create it with: bash deploy/center-secrets.sh ${id}`
+        );
+      }
+    })
+  );
+  const [clientId, clientSecret, token] = values;
   return {
     center: id,
-    centerName: env.CENTER_NAME,
+    centerName: center.name,
     dryRun: bool(process.env.DRY_RUN, true),
     triggerKey: process.env.SYNC_TRIGGER_KEY || "",
     tr: {
-      loginUrl: env.TR_LOGIN_URL.replace(/\/+$/, ""),
-      apiVersion: env.TR_API_VERSION || "v62.0",
-      clientId: env.TR_CLIENT_ID,
-      clientSecret: env.TR_CLIENT_SECRET
+      loginUrl: center.tractionRec.loginUrl.replace(/\/+$/, ""),
+      apiVersion: center.tractionRec.apiVersion || "v62.0",
+      clientId,
+      clientSecret
     },
     zesty: {
-      instanceZuid: env.ZESTY_INSTANCE_ZUID,
-      token: env.ZESTY_INSTANCE_TOKEN,
+      instanceZuid: center.zesty.instanceZuid,
+      token,
       email: "",
       password: ""
     }
@@ -162,13 +177,12 @@ async function loadCenter(id, opts) {
 }
 
 module.exports = {
-  CENTER_KEYS,
-  secretName,
+  REGISTRY,
+  SECRETS,
+  secretNames,
   isCenterId,
-  parseEnv,
-  checkCenter,
-  listLocalCenters,
-  readLocalCenter,
-  readCenter,
+  centerProblems,
+  listCenters,
+  getCenter,
   loadCenter
 };

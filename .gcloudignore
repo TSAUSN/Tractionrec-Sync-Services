@@ -1,7 +1,7 @@
 # What `gcloud functions deploy --source=.` leaves out. The function needs
-# src/, zesty-models/ (read at runtime: the schema check), package.json and
-# package-lock.json. Everything else stays local; .env and .env.<center>
-# (secrets) are never uploaded: the function reads centers from Secret Manager.
+# src/, zesty-models/ (read at runtime: the schema check), centers.yaml (the
+# center list), package.json and package-lock.json. Everything else stays
+# local; .env is never uploaded: the function reads passwords from Secret Manager.
 .gcloudignore
 .git
 .gitignore
@@ -16,3 +16,7 @@ README.md
 AGENTS.md
 
 deploy/
+.github/
+
+# Written by google-github-actions/auth into the workspace; never commit or upload
+gha-creds-*.json
