@@ -243,8 +243,11 @@ step_check() {
   local url token key id out code failed=0 account
   url="$(function_url)"
   account="$(gcloud config get-value account 2>/dev/null || true)"
-  # A service account (CI) needs the audience named; a person's token can't take one.
-  if [[ "$account" == *.gserviceaccount.com ]]; then
+  # CI passes a token issued at sign-in (SYNC_ID_TOKEN); a service account key
+  # needs the audience named; a person's token can't take one.
+  if [ -n "${SYNC_ID_TOKEN:-}" ]; then
+    token="$SYNC_ID_TOKEN"
+  elif [[ "$account" == *.gserviceaccount.com ]]; then
     token="$(gcloud auth print-identity-token --audiences="$url")"
   else
     token="$(gcloud auth print-identity-token)"
