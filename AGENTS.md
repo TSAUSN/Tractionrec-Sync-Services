@@ -54,7 +54,9 @@ zesty-models/*.json     the nine dataset specs, numbered in creation order (read
 centers.yaml            the centers: settings only, one entry each (rule 8)
 .github/workflows/      deploy.yml: tests every pull request, deploys every merge into main
 .gcloudignore           what a deploy leaves out: it uploads src/, zesty-models/, centers.yaml, package files
-deploy/                 deploy.sh (every deploy step, rerunnable), config.sh (names),
+deploy/                 setup.sh (set up a project: first time, again, or moving with --from),
+                        deploy.sh (every deploy step, rerunnable), config.sh (names),
+                        ci.env (generated: the project values the workflow reads),
                         center-secrets.sh (a center's 3 passwords, prompted),
                         secrets.sh (the trigger key), alerts.sh (email alert)
 test/                   unit tests (npm test) + scenarios/ (live, see §6)
@@ -226,7 +228,7 @@ are in `deploy/config.sh`.
 
 | Step | Does | Run by |
 | --- | --- | --- |
-| `apis` | turns on the Google Cloud products the sync and the GitHub trust use | Owner, once |
+| `apis` | turns on the Google Cloud products the sync and the GitHub trust use (and Compute, which creates the build's account) | Owner, once |
 | `accounts` | `kroc-sync-runtime` (the function), `kroc-sync-scheduler` (calls it), `kroc-sync-deployer` (GitHub Actions) | Owner, once |
 | `access` | runtime: read `center-*` secrets (conditional grant) and the trigger key; deployer: the roles above, Cloud Run Admin on the function's service, and act-as the runtime, scheduler and build accounts | Owner, once |
 | `github` | the Workload Identity pool + provider (only this repo's `main`), and the deployer binding | Owner, once |
@@ -237,9 +239,11 @@ are in `deploy/config.sh`.
 | `function` | deploys this folder (with `centers.yaml`) with the flags below | every merge |
 | `schedule` | one job per center; deletes a job whose center left `centers.yaml`. The audience comes from the function's URL and `X-Sync-Key` from Secret Manager | every merge |
 | `check` | a dry run per center over HTTP (`?center=<id>&dry=1`); fails unless each returns its center and `errorCount` 0 | every merge |
+| `ci` | writes `deploy/ci.env` (the trust's address, the deploy account, the function's address), which the workflow reads | setup |
 
 ```
-bash deploy/deploy.sh apis accounts access github secrets invoker alerts   # one-time setup (Owner)
+bash deploy/setup.sh                     # set up / repair the project in config.sh (Owner)
+bash deploy/setup.sh --from=<old>        # move to it from another project (copies passwords, pauses old jobs)
 bash deploy/center-secrets.sh <id>       # a center's passwords (then a PR adding its entry)
 bash deploy/deploy.sh check              # dry-run every center now, as you
 bash deploy/secrets.sh --rotate-key && bash deploy/deploy.sh function schedule check   # new trigger key

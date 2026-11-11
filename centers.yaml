@@ -1,7 +1,7 @@
 # The Kroc centers this sync serves: one entry per center, keyed by its id
 # (lowercase letters, digits and hyphens). Settings only, never passwords.
 #
-# Each center's three passwords live in Secret Manager (project kroc-services):
+# Each center's three passwords live in Secret Manager (the project in deploy/config.sh):
 #   center-<id>-tr-client-id       Traction Rec connected app: client id
 #   center-<id>-tr-client-secret   Traction Rec connected app: client secret
 #   center-<id>-zesty-token        Zesty instance access token

@@ -8,8 +8,9 @@
 #
 # Google Cloud access is Workload Identity Federation: Google trusts tokens
 # GitHub issues to this repository's main branch only, and lets them act as
-# the deployer account. No key is stored here. Set up once by a project Owner:
-# bash deploy/deploy.sh accounts access github (deploy/README.md).
+# the deployer account. No key is stored here. Which project, account and
+# function comes from deploy/ci.env, which deploy/setup.sh writes: moving to
+# another project is that script, then committing ci.env (deploy/README.md).
 name: test and deploy
 
 on:
@@ -55,15 +56,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Project settings (deploy/ci.env)
+        run: grep -E '^[A-Z_]+=' deploy/ci.env >> "$GITHUB_ENV"
       # Also issues an identity token for calling the function (the dry runs):
       # gcloud can't mint one with an audience from federated credentials.
       - id: auth
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/1029593951118/locations/global/workloadIdentityPools/github/providers/github
-          service_account: kroc-sync-deployer@kroc-services.iam.gserviceaccount.com
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOYER_SA }}
           token_format: id_token
-          id_token_audience: https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app
+          id_token_audience: ${{ env.GCP_FUNCTION_URL }}
           id_token_include_email: true
       - uses: google-github-actions/setup-gcloud@v2
       - run: bash deploy/deploy.sh verify function schedule check

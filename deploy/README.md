@@ -35,7 +35,7 @@ flowchart LR
 | Project | `kroc-services` (number 1029593951118), region `us-west1` |
 | Function | `kroc-tractionrec-sync`: `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` |
 | Centers | `phoenix` (00:00 America/Phoenix) and `phoenix-2` (00:30 America/Los_Angeles), a test copy of Phoenix with the same org and instance |
-| Deploys | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml): tests on every pull request, deploys on every merge into `main` |
+| Deploys | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml): tests on every pull request, deploys on every merge into `main`, into the project in [ci.env](ci.env) |
 | Alert email | the `ALERT_EMAIL` in [config.sh](config.sh) |
 
 ## A center
@@ -128,28 +128,69 @@ that secrets exist (not read them); read the trigger key (the jobs send it);
 call the function (the dry runs); act as the accounts the function, its build
 and the jobs run as. It can't read a center's passwords.
 
-## One-time setup (a project Owner)
+## Setting up a project: first time, again, or moving
 
-Done once for the project; rerunnable. From a machine with the gcloud CLI
-signed in as an Owner of `kroc-services`, plus `node` and `npm ci`:
+One command, for all three:
 
 ```bash
-bash deploy/deploy.sh apis accounts access github secrets invoker alerts
+bash deploy/setup.sh                        # set up (or repair) the project in config.sh
+bash deploy/setup.sh --from=<old-project>   # move here from another project
 ```
 
-| Step | Does |
-| --- | --- |
-| `apis` | turns on the Google Cloud products the sync and the GitHub trust use |
-| `accounts` | three service accounts: `kroc-sync-runtime` (the function), `kroc-sync-scheduler` (calls it), `kroc-sync-deployer` (GitHub Actions) |
-| `access` | the function reads `center-*` secrets and the trigger key; the deployer's permissions (above) |
-| `github` | the Workload Identity pool and provider, limited to this repository's `main`, and the deployer binding |
-| `secrets` | the shared trigger key, `sync-trigger-key` ([secrets.sh](secrets.sh)) |
-| `invoker` | the scheduler and the deployer may call the function |
-| `alerts` | the error email ([alerts.sh](alerts.sh)) |
+- **First time:** a new project is empty, so setup builds everything.
+- **Again:** every step checks what exists and only fixes what's missing, so
+  rerunning it on a working project is safe; use it after a manual change or
+  to repair a gap.
+- **Moving** to another Google account, project or organization (e.g. off a
+  personal account): the same setup in the new project, plus `--from`, which
+  copies each center's passwords across and pauses the old project's jobs
+  before the new ones start, so no center runs from both.
 
-Every step can also be run by hand, e.g. `bash deploy/deploy.sh check`, which
-dry-runs every center as you. With no steps named, it runs them all, in the
-order listed at the top of [deploy.sh](deploy.sh).
+**What it does, in order:** checks you're signed in and the project and
+billing exist → turns on the Google Cloud products → creates the three
+accounts, their permissions and the GitHub trust → the trigger key → each
+center's passwords (asked for, or copied with `--from`) → deploys the function
+→ the permissions that need the function → pauses the old project's jobs
+(`--from`) → creates the jobs → dry-runs every center → writes
+`deploy/ci.env`, the values GitHub Actions needs. It ends by printing what to
+do next.
+
+### Moving to another project or organization, step by step
+
+1. **In the new organization:** create the project and link a billing
+   account. Make the person doing the move an **Owner** of it.
+2. **On their machine:** `gcloud auth login` with the new account, and give it
+   read access to the old project's secrets too (or retype the passwords).
+3. **In [config.sh](config.sh):** set `PROJECT` to the new project id, and
+   `ALERT_EMAIL` to the address that should get error emails.
+4. **Run** `bash deploy/setup.sh --from=<old-project>`.
+5. **Commit** `deploy/ci.env` and `deploy/config.sh`, and push to `main`. That
+   GitHub deploy signs in to the new project and repeats the checks.
+6. **Once it's green,** retire the old project: setup prints the commands
+   (its jobs are only paused), or shut the project down.
+
+Nothing about the centers changes: `centers.yaml`, the Zesty instances and
+the Traction Rec orgs stay as they are.
+
+**If the new organization has security policies,** an admin may need to allow:
+Workload Identity Federation with GitHub as a provider (the `github` step);
+the region `us-west1` (else change `REGION` in `config.sh`); an alert email
+outside the organization's domain; service account roles granted to the build
+account.
+
+**If the GitHub repository moves or is renamed,** set `GITHUB_REPO` in
+`config.sh` and run `bash deploy/deploy.sh github`: the trust is tied to the
+repository's name.
+
+### Where the project-specific values live
+
+| File | Holds |
+| --- | --- |
+| [config.sh](config.sh) | `PROJECT`, `REGION`, `ALERT_EMAIL`, `GITHUB_REPO`; everything else derives from these |
+| [ci.env](ci.env) | written by setup: the GitHub trust's address, the deploy account, the function's address. The workflow reads it, so the workflow file itself never changes |
+
+Every step can also be run alone, e.g. `bash deploy/deploy.sh check` (dry-run
+every center as you) or `bash deploy/deploy.sh ci` (rewrite `ci.env`).
 
 ## Things that matter
 

@@ -21,6 +21,10 @@
 #   schedule  one Scheduler job per center in centers.yaml; delete the rest
 #   alerts    the error email (deploy/alerts.sh)
 #   check     a dry run over HTTP for every center: plans, writes nothing
+#   ci        write deploy/ci.env: the project values GitHub Actions needs
+#
+# Setting up a project (first time, again, or moving to another project or
+# organization) is deploy/setup.sh, which runs these in the right order.
 #
 # Names and settings: deploy/config.sh. Secrets are never printed.
 set -euo pipefail
@@ -30,17 +34,19 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/config.sh"
 cd "$DIR/.."
 
-ALL=(apis accounts access github secrets verify function invoker schedule alerts check)
+ALL=(apis accounts access github secrets verify function invoker schedule alerts check ci)
 STEPS=("$@")
 [ ${#STEPS[@]} -gt 0 ] || STEPS=("${ALL[@]}")
 
 step_apis() {
+  # compute: creates the default compute account, which builds run as.
   gcloud services enable --project="$PROJECT" \
     cloudfunctions.googleapis.com run.googleapis.com cloudbuild.googleapis.com \
     artifactregistry.googleapis.com secretmanager.googleapis.com \
     cloudscheduler.googleapis.com logging.googleapis.com \
     monitoring.googleapis.com iam.googleapis.com \
-    iamcredentials.googleapis.com sts.googleapis.com cloudresourcemanager.googleapis.com
+    iamcredentials.googleapis.com sts.googleapis.com cloudresourcemanager.googleapis.com \
+    cloudbilling.googleapis.com compute.googleapis.com
   echo "✔ APIs enabled"
 }
 
@@ -91,6 +97,9 @@ step_access() {
   act_as "$RUNTIME_SA"
   act_as "$SCHEDULER_SA"
   act_as "${num}-compute@developer.gserviceaccount.com"
+  # Builds run as the default compute account, which newer projects no longer
+  # give build rights by default.
+  project_role "serviceAccount:${num}-compute@developer.gserviceaccount.com" roles/cloudbuild.builds.builder
   # A deploy re-applies "no public access" to the function's Cloud Run service
   # (run.services.setIamPolicy): Cloud Run Admin on that one service only.
   if gcloud run services describe "$FUNCTION" --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
@@ -141,6 +150,11 @@ step_secrets() {
 
 step_verify() {
   local id name missing=0
+  # In CI, deploy/ci.env must describe the project config.sh names.
+  if [ -n "${GCP_DEPLOYER_SA:-}" ] && [ "$GCP_DEPLOYER_SA" != "$DEPLOYER_SA" ]; then
+    echo "✘ deploy/ci.env is for $GCP_DEPLOYER_SA, but config.sh names $PROJECT: run deploy/setup.sh"
+    exit 1
+  fi
   for id in $(center_ids); do
     for name in $(center_secret_names "$id"); do
       if gcloud secrets versions list "$name" --project="$PROJECT" --filter="state=ENABLED" \
@@ -273,6 +287,21 @@ step_check() {
   done
   rm -f "$out"
   [ "$failed" = 0 ] || exit 1
+}
+
+step_ci() {
+  local url
+  url="$(function_url)"
+  [ -n "$url" ] || { echo "✘ function not deployed yet: run the function step first"; exit 1; }
+  cat > deploy/ci.env <<CI
+# Written by: bash deploy/deploy.sh ci (deploy/setup.sh runs it). The
+# project-specific values .github/workflows/deploy.yml needs. Not secret.
+GCP_PROJECT_ID=${PROJECT}
+GCP_WIF_PROVIDER=projects/$(project_number)/locations/global/workloadIdentityPools/${WIF_POOL}/providers/${WIF_PROVIDER}
+GCP_DEPLOYER_SA=${DEPLOYER_SA}
+GCP_FUNCTION_URL=${url}
+CI
+  echo "✔ deploy/ci.env written for $PROJECT (commit it)"
 }
 
 echo "Project $PROJECT, region $REGION, steps: ${STEPS[*]}"
