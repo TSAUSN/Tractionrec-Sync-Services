@@ -91,6 +91,14 @@ step_access() {
   act_as "$RUNTIME_SA"
   act_as "$SCHEDULER_SA"
   act_as "${num}-compute@developer.gserviceaccount.com"
+  # A deploy re-applies "no public access" to the function's Cloud Run service
+  # (run.services.setIamPolicy): Cloud Run Admin on that one service only.
+  if gcloud run services describe "$FUNCTION" --region="$REGION" --project="$PROJECT" >/dev/null 2>&1; then
+    gcloud run services add-iam-policy-binding "$FUNCTION" --region="$REGION" --project="$PROJECT" \
+      --member="serviceAccount:${DEPLOYER_SA}" --role=roles/run.admin >/dev/null
+  else
+    echo "⚠ $FUNCTION not deployed yet: rerun this step after the first deploy"
+  fi
   echo "✔ $DEPLOYER_SA: deploy function, Scheduler jobs, secret names, trigger key"
 }
 

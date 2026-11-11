@@ -122,7 +122,8 @@ tokens GitHub issues to workflows of `TSAUSN/Tractionrec-Sync-Services` on
 stored in GitHub. Pull requests, including ones from forks of this public repo,
 can't deploy. One deploy runs at a time.
 
-What the deployer may do: deploy the function; manage Scheduler jobs; see
+What the deployer may do: deploy the function (with Cloud Run Admin on its one
+Cloud Run service, which a deploy needs to keep it private); manage Scheduler jobs; see
 that secrets exist (not read them); read the trigger key (the jobs send it);
 call the function (the dry runs); act as the accounts the function, its build
 and the jobs run as. It can't read a center's passwords.

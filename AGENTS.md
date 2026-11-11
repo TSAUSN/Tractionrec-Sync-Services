@@ -189,7 +189,7 @@ Actions on every merge into `main`** ([.github/workflows/deploy.yml](.github/wor
 | Project | `kroc-services` (number 1029593951118), region `us-west1` |
 | Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
 | Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the secrets below |
-| Deploys as | `kroc-sync-deployer@kroc-services.iam.gserviceaccount.com`, through Workload Identity Federation (pool `github`, provider `github`), limited to `TSAUSN/Tractionrec-Sync-Services` on `main`. No key exists. It can deploy the function, manage Scheduler jobs, see secret names, read the trigger key and call the function; not read center passwords |
+| Deploys as | `kroc-sync-deployer@kroc-services.iam.gserviceaccount.com`, through Workload Identity Federation (pool `github`, provider `github`), limited to `TSAUSN/Tractionrec-Sync-Services` on `main`. No key exists. It can deploy the function (Cloud Run Admin on its service only: a deploy re-applies "no public access"), manage Scheduler jobs, see secret names, read the trigger key and call the function; not read center passwords |
 | Secrets (Secret Manager) | `sync-trigger-key` (bound at deploy as `SYNC_TRIGGER_KEY`; `deploy/secrets.sh`) and three per center, `center-<id>-{tr-client-id,tr-client-secret,zesty-token}` (read per run; `deploy/center-secrets.sh`) |
 | Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email to `ALERT_EMAIL` (`deploy/config.sh`), created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested with a deliberately invalid run (HTTP 500, `sync.failed`) |
 | Schedule | one Cloud Scheduler job per center, `kroc-tractionrec-sync-<id>` (us-west1), at its `schedule` in `centers.yaml`: `phoenix` **00:00 America/Phoenix**, `phoenix-2` 00:30 America/Los_Angeles. POST `/?center=<id>`, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
@@ -218,7 +218,7 @@ are in `deploy/config.sh`.
 | --- | --- | --- |
 | `apis` | turns on the Google Cloud products the sync and the GitHub trust use | Owner, once |
 | `accounts` | `kroc-sync-runtime` (the function), `kroc-sync-scheduler` (calls it), `kroc-sync-deployer` (GitHub Actions) | Owner, once |
-| `access` | runtime: read `center-*` secrets (conditional grant) and the trigger key; deployer: the roles above, and act-as the runtime, scheduler and build accounts | Owner, once |
+| `access` | runtime: read `center-*` secrets (conditional grant) and the trigger key; deployer: the roles above, Cloud Run Admin on the function's service, and act-as the runtime, scheduler and build accounts | Owner, once |
 | `github` | the Workload Identity pool + provider (only this repo's `main`), and the deployer binding | Owner, once |
 | `secrets` | `deploy/secrets.sh`: the trigger key | Owner, once |
 | `invoker` | `run.invoker` on the function for the scheduler and the deployer | Owner, once |
