@@ -201,6 +201,16 @@ Actions on every merge into `main`** ([.github/workflows/deploy.yml](.github/wor
 - **Two centers:** each job's forced run returned 200 with 0 errors, logged
   under its own `center`. Fired at the same moment, the second request
   waited for the first and both returned 200; no retry was needed.
+- **Deploys from GitHub Actions** (centers.yaml, three secrets per center):
+  a merge into `main` signed in through Workload Identity Federation, checked
+  the secrets, deployed, updated both jobs and dry-ran both centers (200, 0
+  errors). Removing `phoenix-2` from `centers.yaml` deleted its job;
+  reverting that commit recreated it. A center without its secrets stops at
+  `verify` before anything changes. Both jobs' forced runs afterwards: 200, 0
+  errors. Two gaps the first runs found, now in the scripts: the deployer
+  needs Cloud Run Admin on the function's service (a deploy re-applies "no
+  public access"), and gcloud can't mint an identity token with an audience
+  from federated credentials, so the auth step issues it (`SYNC_ID_TOKEN`).
 - **Live cache:** `npm run test:live-cache` after the site was published.
   Both live pages were cached by Varnish (`HIT`), yet a published row change
   showed on them after ~12 s, and the sync's restore showed at once.
