@@ -257,6 +257,62 @@ bash deploy/deploy.sh check              # dry-run every center now, as you
 bash deploy/secrets.sh --rotate-key && bash deploy/deploy.sh function schedule check   # new trigger key
 ```
 
+### Setting up a project from scratch, or moving to another one
+
+The procedure as it was run end to end (`kroc-services` → `kroc-tractionrec-sync`,
+on the same personal account). A move to an organization's project is the
+same, with that organization's project and account; a first setup is the same
+without `--from` (setup then asks for each center's passwords).
+
+1. **Create the target project and link billing.** Functions, Scheduler and
+   Secret Manager need billing even within the free tier.
+   ```
+   gcloud billing accounts list
+   gcloud projects create <new-project> --name="KROC Traction Rec sync"
+   gcloud billing projects link <new-project> --billing-account=<account id>
+   ```
+   In an organization, the account running setup must be an **Owner** of the
+   new project and able to read the old project's secrets (for `--from`).
+2. **Point the repo at it:** in `deploy/config.sh`, set `PROJECT` (and
+   `ALERT_EMAIL` if the error emails should go elsewhere).
+3. **Run setup**, with `node_modules` installed (`npm ci`):
+   ```
+   bash deploy/setup.sh --from=<old-project>
+   ```
+   In order, it: checks the sign-in, project and billing → turns the products
+   on → creates the three accounts → the trigger key → the permissions → the
+   GitHub trust → copies each center's three secrets from the old project
+   (never printed; without `--from` it asks for them) → checks them → deploys
+   the function → grants what needs the function to exist → the alert email
+   → **pauses the old project's jobs** → creates this project's jobs → dry-runs
+   every center → writes `deploy/ci.env`. About 4–5 minutes. If a step fails,
+   fix the cause and run the same command again: every step skips what exists.
+4. **Commit `deploy/ci.env` and `deploy/config.sh`, push to `main`.** The
+   GitHub deploy that follows signs in to the new project through the trust
+   and repeats verify → deploy → jobs → dry runs; it must be green.
+5. **Run each center once for real** and read the result:
+   ```
+   gcloud scheduler jobs run kroc-tractionrec-sync-<id> --location=us-west1 --project=<new-project>
+   gcloud logging read 'resource.labels.service_name="kroc-tractionrec-sync" AND jsonPayload.message="sync.done"' \
+     --project=<new-project> --limit=5 --format='value(timestamp,jsonPayload.center,jsonPayload.errorCount)'
+   ```
+   Expect `errorCount` 0 per center. The old project's jobs must show `PAUSED`
+   (`gcloud scheduler jobs list --location=us-west1 --project=<old-project>`).
+6. **Retire the old project** once the new one has run: check it holds only
+   the sync (`gcloud functions list`, `gcloud run services list`, `gcloud
+   storage buckets list`, `gcloud secrets list`, each with
+   `--project=<old-project>`), then `gcloud projects delete <old-project>`.
+   It stays recoverable for 30 days (`gcloud projects undelete`).
+7. **Update the docs** that name the project: the deployment table above,
+   `deploy/README.md` ("What's deployed today") and `docs/dataset-sync.md`.
+
+What the run found: the trigger key must exist before `access` grants read on
+it (fixed: `secrets` now runs before `access`, and a missing key stops the
+step). In a fresh project, setup also turns on the Compute API, which creates
+the account builds run as, and gives that account build rights. An
+organization's policies may additionally block the GitHub trust, the region
+or the alert email; `deploy/README.md` lists them.
+
 A function deploy takes about 1.5 minutes. The flags it uses, and why:
 
 - **`DRY_RUN=0` is required.** Its default is 1, which plans and writes
