@@ -12,9 +12,9 @@
 # Steps:
 #   apis      switch on the Google Cloud products the sync uses
 #   accounts  the service accounts: runtime, scheduler caller, deployer (CI)
+#   secrets   the shared trigger key (deploy/secrets.sh)
 #   access    who may read which secret, and what the deployer may change
 #   github    let GitHub Actions on main deploy as the deployer, with no key
-#   secrets   the shared trigger key (deploy/secrets.sh)
 #   verify    every center in centers.yaml has its three secrets
 #   function  deploy the code (with centers.yaml) from this folder
 #   invoker   who may call the function: the scheduler and the deployer
@@ -34,7 +34,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$DIR/config.sh"
 cd "$DIR/.."
 
-ALL=(apis accounts access github secrets verify function invoker schedule alerts check ci)
+ALL=(apis accounts secrets access github verify function invoker schedule alerts check ci)
 STEPS=("$@")
 [ ${#STEPS[@]} -gt 0 ] || STEPS=("${ALL[@]}")
 
@@ -76,14 +76,21 @@ act_as() { # service account the deployer may run things as
     --member="serviceAccount:${DEPLOYER_SA}" --role=roles/iam.serviceAccountUser >/dev/null
 }
 
+# Read access to the trigger key; it must exist first (the secrets step).
+trigger_grant() {
+  gcloud secrets describe sync-trigger-key --project="$PROJECT" >/dev/null 2>&1 ||
+    { echo "✘ sync-trigger-key doesn't exist yet: run the secrets step before access"; exit 1; }
+  gcloud secrets add-iam-policy-binding sync-trigger-key --project="$PROJECT" \
+    --member="serviceAccount:$1" --role=roles/secretmanager.secretAccessor >/dev/null
+}
+
 step_access() {
   local num
   num="$(project_number)"
   # The function reads any center-* secret, so a new center needs no grant.
   project_role "serviceAccount:${RUNTIME_SA}" roles/secretmanager.secretAccessor \
     "expression=resource.name.startsWith(\"projects/${num}/secrets/center-\"),title=center secrets,description=The sync reads each center's secrets"
-  gcloud secrets add-iam-policy-binding sync-trigger-key --project="$PROJECT" \
-    --member="serviceAccount:${RUNTIME_SA}" --role=roles/secretmanager.secretAccessor >/dev/null 2>&1 || true
+  trigger_grant "$RUNTIME_SA"
   echo "✔ $RUNTIME_SA reads center-* secrets and the trigger key"
 
   # The deployer: deploy the function, keep the jobs, see (not read) center
@@ -92,8 +99,7 @@ step_access() {
   project_role "serviceAccount:${DEPLOYER_SA}" roles/cloudfunctions.developer
   project_role "serviceAccount:${DEPLOYER_SA}" roles/cloudscheduler.admin
   project_role "serviceAccount:${DEPLOYER_SA}" roles/secretmanager.viewer
-  gcloud secrets add-iam-policy-binding sync-trigger-key --project="$PROJECT" \
-    --member="serviceAccount:${DEPLOYER_SA}" --role=roles/secretmanager.secretAccessor >/dev/null 2>&1 || true
+  trigger_grant "$DEPLOYER_SA"
   act_as "$RUNTIME_SA"
   act_as "$SCHEDULER_SA"
   act_as "${num}-compute@developer.gserviceaccount.com"

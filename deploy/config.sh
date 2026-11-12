@@ -3,7 +3,7 @@
 # The centers are not here: they are centers.yaml (settings) and three Secret
 # Manager secrets per center (passwords).
 
-PROJECT="${PROJECT:-kroc-services}"
+PROJECT="${PROJECT:-kroc-tractionrec-sync}"
 REGION="${REGION:-us-west1}"
 
 FUNCTION="${FUNCTION:-kroc-tractionrec-sync}"

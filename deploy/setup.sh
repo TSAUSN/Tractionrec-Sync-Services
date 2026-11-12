@@ -46,7 +46,7 @@ echo "Setting up $PROJECT ($REGION) as $account${FROM:+, moving from $FROM}"
 echo "Centers: $(center_ids | tr '\n' ' ')"
 echo "Alert email: $ALERT_EMAIL   Trusted repo: $GITHUB_REPO @ $GITHUB_BRANCH"
 
-# ── 1. Products, accounts, permissions, the GitHub trust, the trigger key
+# ── 1. Products, accounts, the trigger key (before access grants on it), permissions, the GitHub trust
 deploy apis
 billing="$(gcloud billing projects describe "$PROJECT" --format="value(billingEnabled)" 2>/dev/null || true)"
 if [ "$billing" = "False" ]; then
@@ -56,7 +56,7 @@ if [ "$billing" = "False" ]; then
 elif [ "$billing" != "True" ]; then
   echo "⚠ couldn't read $PROJECT's billing status; continuing (a step fails clearly if billing is off)"
 fi
-deploy accounts access github secrets
+deploy accounts secrets access github
 
 # ── 2. Each center's three passwords
 for id in $(center_ids); do
