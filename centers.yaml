@@ -32,16 +32,3 @@ phoenix:
   schedule:
     cron: "0 0 * * *"
     timeZone: America/Phoenix
-
-# A test copy of Phoenix (same org, same instance, so its runs write nothing
-# new). Remove it, and its secrets, once a real second center exists.
-phoenix-2:
-  name: Phoenix again (multi-center test)
-  tractionRec:
-    loginUrl: https://krocphoenix--phoenixfsb.sandbox.my.salesforce.com
-    apiVersion: v62.0
-  zesty:
-    instanceZuid: 8-80c0bba6b8-lhkcc7
-  schedule:
-    cron: "30 0 * * *"
-    timeZone: America/Los_Angeles
