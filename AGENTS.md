@@ -188,13 +188,13 @@ Actions on every merge into `main`** ([.github/workflows/deploy.yml](.github/wor
 
 | | |
 | --- | --- |
-| Project | `kroc-services` (number 1029593951118), region `us-west1` |
-| Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-aswjekxq4q-uw.a.run.app`) |
-| Runs as | `kroc-sync-runtime@kroc-services.iam.gserviceaccount.com`, which can read only the secrets below |
-| Deploys as | `kroc-sync-deployer@kroc-services.iam.gserviceaccount.com`, through Workload Identity Federation (pool `github`, provider `github`), limited to `TSAUSN/Tractionrec-Sync-Services` on `main`. No key exists. It can deploy the function (Cloud Run Admin on its service only: a deploy re-applies "no public access"), manage Scheduler jobs, see secret names, read the trigger key and call the function; not read center passwords |
+| Project | `kroc-tractionrec-sync` (number 69222274107; moved from `kroc-services` with `deploy/setup.sh --from`), region `us-west1` |
+| Function | `kroc-tractionrec-sync` (Cloud Run functions, gen 2, nodejs22), URL `https://us-west1-kroc-tractionrec-sync.cloudfunctions.net/kroc-tractionrec-sync` (Cloud Run: `https://kroc-tractionrec-sync-mrmyzndm2a-uw.a.run.app`) |
+| Runs as | `kroc-sync-runtime@kroc-tractionrec-sync.iam.gserviceaccount.com`, which can read only the secrets below |
+| Deploys as | `kroc-sync-deployer@kroc-tractionrec-sync.iam.gserviceaccount.com`, through Workload Identity Federation (pool `github`, provider `github`), limited to `TSAUSN/Tractionrec-Sync-Services` on `main`. No key exists. It can deploy the function (Cloud Run Admin on its service only: a deploy re-applies "no public access"), manage Scheduler jobs, see secret names, read the trigger key and call the function; not read center passwords |
 | Secrets (Secret Manager) | `sync-trigger-key` (bound at deploy as `SYNC_TRIGGER_KEY`; `deploy/secrets.sh`) and three per center, `center-<id>-{tr-client-id,tr-client-secret,zesty-token}` (read per run; `deploy/center-secrets.sh`) |
 | Alert | Cloud Monitoring policy "kroc-tractionrec-sync: run errors" → email to `ALERT_EMAIL` (`deploy/config.sh`), created by `deploy/alerts.sh`. Fires on a run with `errorCount > 0`, `sync.failed`, any ERROR line from the function, or a failed Scheduler call; at most one email per 5 min. Tested with a deliberately invalid run (HTTP 500, `sync.failed`) |
-| Schedule | one Cloud Scheduler job per center, `kroc-tractionrec-sync-<id>` (us-west1), at its `schedule` in `centers.yaml`: `phoenix` **00:00 America/Phoenix**, `phoenix-2` 00:30 America/Los_Angeles. POST `/?center=<id>`, OIDC as `kroc-sync-scheduler@kroc-services.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
+| Schedule | one Cloud Scheduler job per center, `kroc-tractionrec-sync-<id>` (us-west1), at its `schedule` in `centers.yaml`: `phoenix` **00:00 America/Phoenix**, `phoenix-2` 00:30 America/Los_Angeles. POST `/?center=<id>`, OIDC as `kroc-sync-scheduler@kroc-tractionrec-sync.iam.gserviceaccount.com` (the only account with `run.invoker` on the function) + `X-Sync-Key`; 600 s deadline, 3 retries 5 min apart |
 
 **Verified on deploy:**
 - **Auth:** no identity → 403; identity without the key → 403; both → 200.
@@ -213,6 +213,14 @@ Actions on every merge into `main`** ([.github/workflows/deploy.yml](.github/wor
   needs Cloud Run Admin on the function's service (a deploy re-applies "no
   public access"), and gcloud can't mint an identity token with an audience
   from federated credentials, so the auth step issues it (`SYNC_ID_TOKEN`).
+- **A whole move, from an empty project** (`kroc-services` → `kroc-tractionrec-sync`):
+  `setup.sh --from=kroc-services` created the products, accounts, permissions,
+  GitHub trust and trigger key, copied the six center secrets, deployed,
+  paused the old project's jobs before creating the new ones, dry-ran both
+  centers and wrote `ci.env`; the push that followed deployed from GitHub into
+  the new project, and both jobs' forced runs returned 200 with 0 errors. The
+  first attempt found one ordering bug, now fixed: the trigger key has to
+  exist before `access` grants read on it. The old project was then deleted.
 - **Live cache:** `npm run test:live-cache` after the site was published.
   Both live pages were cached by Varnish (`HIT`), yet a published row change
   showed on them after ~12 s, and the sync's restore showed at once.

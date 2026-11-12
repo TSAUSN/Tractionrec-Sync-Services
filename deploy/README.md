@@ -15,7 +15,7 @@ flowchart LR
   subgraph GitHub
     Y["centers.yaml<br/>(settings, no passwords)"] -- "pull request → review → merge" --> GA["GitHub Actions"]
   end
-  subgraph "Google Cloud (kroc-services)"
+  subgraph "Google Cloud (kroc-tractionrec-sync)"
     GA -- "deploy" --> FN["Function"]
     GA -- "create / update / delete" --> J["Scheduler job per center"]
     GA -. "checks the 3 secrets exist" .-> SM
@@ -32,8 +32,8 @@ flowchart LR
 
 | | |
 | --- | --- |
-| Project | `kroc-services` (number 1029593951118), region `us-west1` |
-| Function | `kroc-tractionrec-sync`: `https://us-west1-kroc-services.cloudfunctions.net/kroc-tractionrec-sync` |
+| Project | `kroc-tractionrec-sync` (number 69222274107; moved from `kroc-services` with `deploy/setup.sh --from`), region `us-west1` |
+| Function | `kroc-tractionrec-sync`: `https://us-west1-kroc-tractionrec-sync.cloudfunctions.net/kroc-tractionrec-sync` |
 | Centers | `phoenix` (00:00 America/Phoenix) and `phoenix-2` (00:30 America/Los_Angeles), a test copy of Phoenix with the same org and instance |
 | Deploys | [.github/workflows/deploy.yml](../.github/workflows/deploy.yml): tests on every pull request, deploys on every merge into `main`, into the project in [ci.env](ci.env) |
 | Alert email | the `ALERT_EMAIL` in [config.sh](config.sh) |

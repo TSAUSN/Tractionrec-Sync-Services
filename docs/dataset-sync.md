@@ -21,7 +21,7 @@ Parsley.
 - **No page fetches anything.** Each page gets its Traction Rec data in the
   HTML it is served.
 - **Deployed.** It's an HTTP Cloud Function in Google Cloud
-  project `kroc-services` (us-west1), called by Cloud Scheduler **daily at
+  project `kroc-tractionrec-sync` (us-west1), called by Cloud Scheduler **daily at
   midnight, Phoenix time**. The site code is published to the live domain,
   and a published data change reaches the live pages through their cache in
   about 12 s.
